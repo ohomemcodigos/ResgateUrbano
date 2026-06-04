@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/chamado.dart';
 import '../providers/chamados_provider.dart';
+import '../services/via_cep_service.dart';
 
 class CadastroScreen extends StatefulWidget {
   const CadastroScreen({super.key});
@@ -14,11 +15,14 @@ class _CadastroScreenState extends State<CadastroScreen> {
   final _formKey = GlobalKey<FormState>();
   final _tituloController = TextEditingController();
   final _descricaoController = TextEditingController();
+  final _cepController = TextEditingController();
+  final _ruaController = TextEditingController();
   final _bairroController = TextEditingController();
   final _responsavelController = TextEditingController();
 
   String _categoria = 'trânsito';
   String _prioridade = 'baixa';
+  bool _buscandoCep = false;
 
   final _categorias = [
     'trânsito',
@@ -29,6 +33,36 @@ class _CadastroScreenState extends State<CadastroScreen> {
     'desastre natural'
   ];
   final _prioridades = ['baixa', 'média', 'alta', 'crítica'];
+
+  Future<void> _buscarCep() async {
+    final cep = _cepController.text;
+    if (cep.isEmpty) return;
+
+    setState(() => _buscandoCep = true);
+
+    // O serviço retornará um Map com 'rua' e 'bairro'
+    final endereco = await ViaCepService.buscarEnderecoPorCep(cep);
+
+    setState(() {
+      _buscandoCep = false;
+      if (endereco != null) {
+        _ruaController.text = endereco['rua'] ?? '';
+        _bairroController.text = endereco['bairro'] ?? '';
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Endereço preenchido automaticamente!'),
+              backgroundColor: Colors.green),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text(
+                  'CEP não encontrado. Preencha os dados manualmente ou tente novamente.'),
+              backgroundColor: Colors.orange),
+        );
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -53,6 +87,34 @@ class _CadastroScreenState extends State<CadastroScreen> {
                     ? 'Não permitir descrição vazia'
                     : null,
               ),
+              const SizedBox(height: 16),
+              const Text('Localização',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              TextFormField(
+                controller: _cepController,
+                decoration: InputDecoration(
+                  labelText: 'CEP (Opcional - Busca Automática)',
+                  hintText: 'Digite apenas números',
+                  suffixIcon: _buscandoCep
+                      ? const Padding(
+                          padding: EdgeInsets.all(12.0),
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : IconButton(
+                          icon: const Icon(Icons.search),
+                          onPressed: _buscarCep,
+                          tooltip: 'Buscar Endereço',
+                        ),
+                ),
+                keyboardType: TextInputType.number,
+                onFieldSubmitted: (_) => _buscarCep(),
+              ),
+              TextFormField(
+                controller: _ruaController,
+                decoration: const InputDecoration(labelText: 'Rua'),
+                validator: (v) =>
+                    v == null || v.trim().isEmpty ? 'Rua é obrigatória' : null,
+              ),
               TextFormField(
                 controller: _bairroController,
                 decoration: const InputDecoration(labelText: 'Bairro'),
@@ -60,6 +122,7 @@ class _CadastroScreenState extends State<CadastroScreen> {
                     ? 'Não permitir bairro vazio'
                     : null,
               ),
+              const SizedBox(height: 16),
               TextFormField(
                 controller: _responsavelController,
                 decoration: const InputDecoration(labelText: 'Responsável'),
@@ -92,6 +155,7 @@ class _CadastroScreenState extends State<CadastroScreen> {
                       descricao: _descricaoController.text.trim(),
                       categoria: _categoria,
                       prioridade: _prioridade,
+                      rua: _ruaController.text.trim(), // Salvando a rua
                       bairro: _bairroController.text.trim(),
                       responsavel: _responsavelController.text.trim(),
                       dataAbertura: DateTime.now(),

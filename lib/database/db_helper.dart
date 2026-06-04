@@ -20,7 +20,8 @@ class DatabaseHelper {
     if (_database != null) return _database!;
 
     try {
-      _database = await _initDB('soscidade.db');
+      // Alterado para v3 para forçar a criação da nova coluna 'rua'
+      _database = await _initDB('soscidade_v3.db');
       return _database!;
     } catch (e) {
       if (kIsWeb) {
@@ -56,10 +57,14 @@ class DatabaseHelper {
       descricao TEXT NOT NULL,
       categoria TEXT NOT NULL,
       prioridade TEXT NOT NULL,
+      rua TEXT NOT NULL,
       bairro TEXT NOT NULL,
       responsavel TEXT NOT NULL,
       dataAbertura TEXT NOT NULL,
-      status TEXT NOT NULL
+      status TEXT NOT NULL,
+      isFavorito INTEGER NOT NULL DEFAULT 0,
+      latitude REAL,
+      longitude REAL
     )
     ''');
   }
@@ -78,10 +83,14 @@ class DatabaseHelper {
       'descricao': chamado.descricao,
       'categoria': chamado.categoria,
       'prioridade': chamado.prioridade,
+      'rua': chamado.rua,
       'bairro': chamado.bairro,
       'responsavel': chamado.responsavel,
       'dataAbertura': chamado.dataAbertura.toIso8601String(),
       'status': chamado.status,
+      'isFavorito': chamado.isFavorito ? 1 : 0,
+      'latitude': chamado.latitude,
+      'longitude': chamado.longitude,
     });
   }
 
@@ -101,10 +110,14 @@ class DatabaseHelper {
               descricao: json['descricao'] as String,
               categoria: json['categoria'] as String,
               prioridade: json['prioridade'] as String,
+              rua: json['rua'] as String,
               bairro: json['bairro'] as String,
               responsavel: json['responsavel'] as String,
               dataAbertura: DateTime.parse(json['dataAbertura'] as String),
               status: json['status'] as String,
+              isFavorito: (json['isFavorito'] as int) == 1,
+              latitude: json['latitude'] as double?,
+              longitude: json['longitude'] as double?,
             ))
         .toList();
   }
@@ -114,17 +127,24 @@ class DatabaseHelper {
 
     if (_usarFallbackMemoria || db == null) {
       final index = _chamadosWebMock.indexWhere((c) => c.id == id);
-      if (index != -1) {
-        _chamadosWebMock[index].status = status;
-      }
+      if (index != -1) _chamadosWebMock[index].status = status;
       return;
     }
 
-    await db.update(
-      'chamados',
-      {'status': status},
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    await db.update('chamados', {'status': status},
+        where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<void> alternarFavorito(String id, bool isFavorito) async {
+    final db = await instance.database;
+
+    if (_usarFallbackMemoria || db == null) {
+      final index = _chamadosWebMock.indexWhere((c) => c.id == id);
+      if (index != -1) _chamadosWebMock[index].isFavorito = isFavorito;
+      return;
+    }
+
+    await db.update('chamados', {'isFavorito': isFavorito ? 1 : 0},
+        where: 'id = ?', whereArgs: [id]);
   }
 }

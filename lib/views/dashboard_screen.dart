@@ -21,6 +21,8 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
+  String _searchQuery = ''; // Estado da barra de busca
+
   // Função que calcula o tempo decorrido
   String _calcularTempoAberto(DateTime dataAbertura) {
     final diferenca = DateTime.now().difference(dataAbertura);
@@ -76,15 +78,56 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  void _abrirModalRanking(BuildContext context) {
+    final ranking =
+        Provider.of<ChamadosProvider>(context, listen: false).rankingDeBairros;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Ranking de Bairros',
+              style: TextStyle(fontWeight: FontWeight.bold)),
+          content: ranking.isEmpty
+              ? const Text('Nenhum chamado registrado ainda.')
+              : SizedBox(
+                  width: double.maxFinite,
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: ranking.length,
+                    itemBuilder: (context, index) {
+                      String bairro = ranking.keys.elementAt(index);
+                      int quantidade = ranking.values.elementAt(index);
+                      return ListTile(
+                        leading: CircleAvatar(child: Text('${index + 1}º')),
+                        title: Text(bairro),
+                        trailing: Text('$quantidade chamado(s)',
+                            style:
+                                const TextStyle(fontWeight: FontWeight.bold)),
+                      );
+                    },
+                  ),
+                ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Fechar'),
+            )
+          ],
+        );
+      },
+    );
+  }
+
   void _atualizarStatus(
       BuildContext context, String id, String novoStatus) async {
     try {
       await Provider.of<ChamadosProvider>(context, listen: false)
           .atualizarStatus(id, novoStatus);
-      if (context.mounted) Navigator.pop(context); // Fecha o modal
+      if (context.mounted) Navigator.pop(context);
     } catch (e) {
       if (context.mounted) {
-        Navigator.pop(context); // Fecha o modal
+        Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text(e.toString()), backgroundColor: Colors.red));
       }
@@ -96,8 +139,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final provider = Provider.of<ChamadosProvider>(context);
     final chamados = provider.chamados;
 
+    // Lógica de Busca: Filtra por título ou bairro
+    final chamadosFiltrados = chamados.where((c) {
+      final query = _searchQuery.toLowerCase();
+      return c.titulo.toLowerCase().contains(query) ||
+          c.bairro.toLowerCase().contains(query);
+    }).toList();
+
     // Regra: Alta e Crítica no topo
-    final sortedChamados = List<Chamado>.from(chamados);
+    final sortedChamados = List<Chamado>.from(chamadosFiltrados);
     sortedChamados.sort((a, b) {
       int peso(String p) {
         if (p == 'crítica') return 4;
@@ -161,6 +211,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       Text('Total de Chamados: $totalChamados',
                           style: const TextStyle(
                               fontSize: 18, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 8),
+                      OutlinedButton.icon(
+                        icon: const Icon(Icons.bar_chart),
+                        label: const Text('Ver Ranking de Bairros'),
+                        onPressed: () => _abrirModalRanking(context),
+                      ),
                     ],
                   ),
                 ),
@@ -175,24 +231,66 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     _buildCard('Críticos', criticos, Colors.red),
                   ],
                 ),
-                const Divider(),
-                Expanded(
-                  child: ListView.builder(
-                    itemCount: sortedChamados.length,
-                    itemBuilder: (context, index) {
-                      final c = sortedChamados[index];
-                      return ListTile(
-                        leading: const Icon(Icons.report_problem),
-                        title: Text(c.titulo,
-                            style:
-                                const TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: Text(
-                            '${c.categoria} • ${c.prioridade}\n${c.bairro} • ${_calcularTempoAberto(c.dataAbertura)}'),
-                        trailing: Chip(label: Text(c.status)),
-                        onTap: () => _abrirModalStatus(context, c), // Nova ação
-                      );
+                const SizedBox(height: 8),
+                // BARRA DE PESQUISA
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16.0, vertical: 8.0),
+                  child: TextField(
+                    decoration: InputDecoration(
+                      labelText: 'Buscar chamados...',
+                      hintText: 'Digite o título ou bairro',
+                      prefixIcon: const Icon(Icons.search),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12.0),
+                      ),
+                    ),
+                    onChanged: (value) {
+                      setState(() {
+                        _searchQuery = value;
+                      });
                     },
                   ),
+                ),
+                const Divider(),
+                Expanded(
+                  child: sortedChamados.isEmpty
+                      ? const Center(child: Text('Nenhum chamado encontrado.'))
+                      : ListView.builder(
+                          itemCount: sortedChamados.length,
+                          itemBuilder: (context, index) {
+                            final c = sortedChamados[index];
+                            return ListTile(
+                              leading: const Icon(Icons.report_problem),
+                              title: Text(c.titulo,
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.bold)),
+                              subtitle: Text(
+                                  '${c.categoria} • ${c.prioridade}\n${c.rua}, ${c.bairro}\n${_calcularTempoAberto(c.dataAbertura)}'),
+                              // Trailing com botão de favorito e status
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: Icon(
+                                      c.isFavorito
+                                          ? Icons.star
+                                          : Icons.star_border,
+                                      color: c.isFavorito
+                                          ? Colors.amber
+                                          : Colors.grey,
+                                    ),
+                                    onPressed: () {
+                                      provider.alternarFavorito(c.id);
+                                    },
+                                  ),
+                                  Chip(label: Text(c.status)),
+                                ],
+                              ),
+                              onTap: () => _abrirModalStatus(context, c),
+                            );
+                          },
+                        ),
                 ),
               ],
             ),

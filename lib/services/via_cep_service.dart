@@ -3,7 +3,7 @@ import 'package:http/http.dart' as http;
 
 class ViaCepService {
   static Future<Map<String, String>?> buscarEnderecoPorCep(String cep) async {
-    // Remove qualquer caractere que não seja número (ex: hífens ou pontos)
+    // Remove qualquer caractere que não seja número
     final cleanCep = cep.replaceAll(RegExp(r'[^0-9]'), '');
 
     if (cleanCep.length != 8) return null;

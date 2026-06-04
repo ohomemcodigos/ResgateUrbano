@@ -1,5 +1,4 @@
 import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
-import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 import 'package:path/path.dart';
@@ -20,8 +19,8 @@ class DatabaseHelper {
     if (_database != null) return _database!;
 
     try {
-      // Alterado para v3 para forçar a criação da nova coluna 'rua'
-      _database = await _initDB('soscidade_v3.db');
+      // Alterado para v4
+      _database = await _initDB('soscidade_v4.db');
       return _database!;
     } catch (e) {
       if (kIsWeb) {
@@ -61,6 +60,7 @@ class DatabaseHelper {
       bairro TEXT NOT NULL,
       responsavel TEXT NOT NULL,
       dataAbertura TEXT NOT NULL,
+      dataFechamento TEXT,
       status TEXT NOT NULL,
       isFavorito INTEGER NOT NULL DEFAULT 0,
       latitude REAL,
@@ -87,6 +87,7 @@ class DatabaseHelper {
       'bairro': chamado.bairro,
       'responsavel': chamado.responsavel,
       'dataAbertura': chamado.dataAbertura.toIso8601String(),
+      'dataFechamento': chamado.dataFechamento?.toIso8601String(),
       'status': chamado.status,
       'isFavorito': chamado.isFavorito ? 1 : 0,
       'latitude': chamado.latitude,
@@ -114,6 +115,9 @@ class DatabaseHelper {
               bairro: json['bairro'] as String,
               responsavel: json['responsavel'] as String,
               dataAbertura: DateTime.parse(json['dataAbertura'] as String),
+              dataFechamento: json['dataFechamento'] != null
+                  ? DateTime.parse(json['dataFechamento'] as String)
+                  : null,
               status: json['status'] as String,
               isFavorito: (json['isFavorito'] as int) == 1,
               latitude: json['latitude'] as double?,
@@ -122,16 +126,22 @@ class DatabaseHelper {
         .toList();
   }
 
-  Future<void> atualizarStatusChamado(String id, String status) async {
+  // Refatorado para atualizar o status e salvar a data de fechamento simultaneamente
+  Future<void> atualizarStatusEFechamento(
+      String id, String status, DateTime? fechamento) async {
     final db = await instance.database;
 
     if (_usarFallbackMemoria || db == null) {
       final index = _chamadosWebMock.indexWhere((c) => c.id == id);
-      if (index != -1) _chamadosWebMock[index].status = status;
+      if (index != -1) {
+        _chamadosWebMock[index].status = status;
+        _chamadosWebMock[index].dataFechamento = fechamento;
+      }
       return;
     }
 
-    await db.update('chamados', {'status': status},
+    await db.update('chamados',
+        {'status': status, 'dataFechamento': fechamento?.toIso8601String()},
         where: 'id = ?', whereArgs: [id]);
   }
 

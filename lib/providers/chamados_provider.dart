@@ -8,8 +8,8 @@ class ChamadosProvider extends ChangeNotifier {
 
   List<Chamado> get chamados => _chamados;
   bool get isLoading => _isLoading;
-  // Filtros rápidos para o Dashboard
 
+  // Filtros rápidos para o Dashboard
   List<Chamado> get chamadosAbertos =>
       _chamados.where((c) => c.status == 'Aberto').toList();
 
@@ -28,6 +28,37 @@ class ChamadosProvider extends ChangeNotifier {
     final mapOrdenado = Map.fromEntries(
         map.entries.toList()..sort((e1, e2) => e2.value.compareTo(e1.value)));
     return mapOrdenado;
+  }
+
+  // Dashboard Avançado: Cálculo do SLA (Tempo Médio de Resolução) por Categoria
+  Map<String, String> get tempoMedioResolucaoPorCategoria {
+    final mapTempos = <String, List<int>>{};
+
+    final chamadosConcluidos = _chamados
+        .where((c) => c.status == 'Concluído' && c.dataFechamento != null);
+
+    for (var c in chamadosConcluidos) {
+      final minutosGastos =
+          c.dataFechamento!.difference(c.dataAbertura).inMinutes;
+      if (!mapTempos.containsKey(c.categoria)) {
+        mapTempos[c.categoria] = [];
+      }
+      mapTempos[c.categoria]!.add(minutosGastos);
+    }
+
+    final medias = <String, String>{};
+    mapTempos.forEach((categoria, tempos) {
+      final mediaMinutos = tempos.reduce((a, b) => a + b) / tempos.length;
+      if (mediaMinutos > 1440) {
+        medias[categoria] = '${(mediaMinutos / 1440).toStringAsFixed(1)} dias';
+      } else if (mediaMinutos > 60) {
+        medias[categoria] = '${(mediaMinutos / 60).toStringAsFixed(1)} horas';
+      } else {
+        medias[categoria] = '${mediaMinutos.toInt()} minutos';
+      }
+    });
+
+    return medias;
   }
 
   Future<void> carregarChamados() async {
@@ -60,8 +91,16 @@ class ChamadosProvider extends ChangeNotifier {
         throw Exception('Chamados concluídos não podem ser alterados.');
       }
 
-      await DatabaseHelper.instance.atualizarStatusChamado(id, novoStatus);
+      DateTime? dataFechamento;
+      if (novoStatus == 'Concluído') {
+        dataFechamento = DateTime.now();
+      }
+
+      await DatabaseHelper.instance
+          .atualizarStatusEFechamento(id, novoStatus, dataFechamento);
+
       _chamados[index].status = novoStatus;
+      _chamados[index].dataFechamento = dataFechamento;
       notifyListeners();
     }
   }

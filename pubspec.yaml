@@ -1,23 +1,27 @@
-name: appsos_cidade
-description: A new Flutter project.
+name: sos_cidade
+description: Projeto Missao Resgate Urbano.
 publish_to: 'none'
-
 version: 1.0.0+1
 
 environment:
-  sdk: ^3.0.0
+  sdk: '>=3.0.0 <4.0.0'
 
 dependencies:
   flutter:
     sdk: flutter
+  provider: ^6.1.1
+  sqflite: ^2.3.0
+  sqflite_common_ffi: ^2.3.0
+  sqflite_common_ffi_web: ^0.4.0
+  path_provider: ^2.1.2
+  intl: ^0.19.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^4.0.0
+  flutter_lints: ^3.0.0
 
 flutter:
-
   uses-material-design: true
   # assets:
   #  - images/a_dot_burr.jpeg

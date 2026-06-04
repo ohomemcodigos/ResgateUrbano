@@ -1,0 +1,227 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
+import '../providers/chamados_provider.dart';
+import '../models/chamado.dart';
+import 'cadastro_screen.dart';
+
+class DashboardScreen extends StatefulWidget {
+  const DashboardScreen({
+    super.key,
+    required this.title,
+    required this.handleBrightnessChange,
+    required this.useLightMode,
+  });
+  final String title;
+  final bool useLightMode;
+  final void Function(bool useLightMode) handleBrightnessChange;
+
+  @override
+  State<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends State<DashboardScreen> {
+  // Função que calcula o tempo decorrido
+  String _calcularTempoAberto(DateTime dataAbertura) {
+    final diferenca = DateTime.now().difference(dataAbertura);
+    if (diferenca.inDays > 0) return '${diferenca.inDays} dia(s) atrás';
+    if (diferenca.inHours > 0) return '${diferenca.inHours} hora(s) atrás';
+    if (diferenca.inMinutes > 0)
+      return '${diferenca.inMinutes} minuto(s) atrás';
+    return 'Agora mesmo';
+  }
+
+  void _abrirModalStatus(BuildContext context, Chamado chamado) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(chamado.titulo),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Status atual: ${chamado.status}'),
+              const SizedBox(height: 8),
+              Text('Aberto há: ${_calcularTempoAberto(chamado.dataAbertura)}',
+                  style: const TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 16),
+              const Text('Alterar status para:'),
+              Wrap(
+                spacing: 8.0,
+                children: [
+                  ActionChip(
+                    label: const Text('Andamento'),
+                    onPressed: () =>
+                        _atualizarStatus(context, chamado.id, 'Em andamento'),
+                  ),
+                  ActionChip(
+                    label: const Text('Concluído'),
+                    backgroundColor: Colors.green.shade100,
+                    onPressed: () =>
+                        _atualizarStatus(context, chamado.id, 'Concluído'),
+                  ),
+                ],
+              )
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Fechar'),
+            )
+          ],
+        );
+      },
+    );
+  }
+
+  void _atualizarStatus(
+      BuildContext context, String id, String novoStatus) async {
+    try {
+      await Provider.of<ChamadosProvider>(context, listen: false)
+          .atualizarStatus(id, novoStatus);
+      if (context.mounted) Navigator.pop(context); // Fecha o modal
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.pop(context); // Fecha o modal
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(e.toString()), backgroundColor: Colors.red));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = Provider.of<ChamadosProvider>(context);
+    final chamados = provider.chamados;
+
+    // Regra: Alta e Crítica no topo
+    final sortedChamados = List<Chamado>.from(chamados);
+    sortedChamados.sort((a, b) {
+      int peso(String p) {
+        if (p == 'crítica') return 4;
+        if (p == 'alta') return 3;
+        if (p == 'média') return 2;
+        return 1;
+      }
+
+      return peso(b.prioridade.toLowerCase())
+          .compareTo(peso(a.prioridade.toLowerCase()));
+    });
+
+    final totalChamados = chamados.length;
+    final abertos = provider.chamadosAbertos.length;
+    final emAndamento =
+        chamados.where((c) => c.status == 'Em andamento').length;
+    final concluidos = chamados.where((c) => c.status == 'Concluído').length;
+    final criticos = provider.chamadosCriticos.length;
+
+    final isBright = Theme.of(context).brightness == Brightness.light;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.title),
+        actions: [
+          Tooltip(
+            message: 'Alternar tema',
+            child: IconButton(
+              icon: isBright
+                  ? const Icon(Icons.dark_mode_outlined)
+                  : const Icon(Icons.light_mode_outlined),
+              onPressed: () => widget.handleBrightnessChange(!isBright),
+            ),
+          ),
+        ],
+      ),
+      body: provider.isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : Column(
+              children: [
+                if (criticos > 5)
+                  Container(
+                    color: Colors.redAccent,
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(8.0),
+                    child: const Text(
+                      'ALERTA: Mais de 5 chamados críticos registrados!',
+                      style: TextStyle(
+                          color: Colors.white, fontWeight: FontWeight.bold),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    children: [
+                      Text(
+                          DateFormat('dd/MM/yyyy - HH:mm')
+                              .format(DateTime.now()),
+                          style: const TextStyle(fontSize: 16)),
+                      Text('Total de Chamados: $totalChamados',
+                          style: const TextStyle(
+                              fontSize: 18, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ),
+                Wrap(
+                  spacing: 8.0,
+                  runSpacing: 8.0,
+                  alignment: WrapAlignment.center,
+                  children: [
+                    _buildCard('Abertos', abertos, Colors.blue),
+                    _buildCard('Andamento', emAndamento, Colors.orange),
+                    _buildCard('Concluídos', concluidos, Colors.green),
+                    _buildCard('Críticos', criticos, Colors.red),
+                  ],
+                ),
+                const Divider(),
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: sortedChamados.length,
+                    itemBuilder: (context, index) {
+                      final c = sortedChamados[index];
+                      return ListTile(
+                        leading: const Icon(Icons.report_problem),
+                        title: Text(c.titulo,
+                            style:
+                                const TextStyle(fontWeight: FontWeight.bold)),
+                        subtitle: Text(
+                            '${c.categoria} • ${c.prioridade}\n${c.bairro} • ${_calcularTempoAberto(c.dataAbertura)}'),
+                        trailing: Chip(label: Text(c.status)),
+                        onTap: () => _abrirModalStatus(context, c), // Nova ação
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const CadastroScreen()),
+          );
+        },
+        child: const Icon(Icons.add),
+      ),
+    );
+  }
+
+  Widget _buildCard(String titulo, int valor, Color cor) {
+    return Card(
+      elevation: 2,
+      child: Container(
+        width: 150,
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            Text(titulo,
+                style: TextStyle(color: cor, fontWeight: FontWeight.bold)),
+            Text('$valor', style: const TextStyle(fontSize: 24)),
+          ],
+        ),
+      ),
+    );
+  }
+}

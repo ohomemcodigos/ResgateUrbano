@@ -1,12 +1,17 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
+import 'package:fl_chart/fl_chart.dart';
 import '../providers/chamados_provider.dart';
 import '../providers/auth_provider.dart';
 import '../models/chamado.dart';
 import 'cadastro_screen.dart';
 
-class DashboardCidadaoScreen extends StatefulWidget {
-  const DashboardCidadaoScreen({
+// Ecrã exclusivo para perfis com permissão administrativa (Auditor).
+// Fornece acesso a gráficos, métricas de SLA e edição de status.
+class DashboardAuditorScreen extends StatefulWidget {
+  const DashboardAuditorScreen({
     super.key,
     required this.title,
     required this.handleBrightnessChange,
@@ -17,120 +22,19 @@ class DashboardCidadaoScreen extends StatefulWidget {
   final void Function(bool useLightMode) handleBrightnessChange;
 
   @override
-  State<DashboardCidadaoScreen> createState() => _DashboardCidadaoScreenState();
+  State<DashboardAuditorScreen> createState() => _DashboardAuditorScreenState();
 }
 
-class _DashboardCidadaoScreenState extends State<DashboardCidadaoScreen> {
-  String _searchQuery = '';
-
-  String _calcularTempoAberto(DateTime dataAbertura) {
-    final diferenca = DateTime.now().difference(dataAbertura);
-    if (diferenca.inDays > 0) return '${diferenca.inDays} dia(s) atrás';
-    if (diferenca.inHours > 0) return '${diferenca.inHours} hora(s) atrás';
-    if (diferenca.inMinutes > 0)
-      return '${diferenca.inMinutes} minuto(s) atrás';
-    return 'Agora mesmo';
-  }
-
-  // Função auxiliar para mapear o órgão responsável com base na categoria
-  Map<String, String> _getOrgaoResponsavel(String categoria) {
-    switch (categoria.toLowerCase()) {
-      case 'trânsito':
-        return {'orgao': 'SEMOB', 'contato': '118'};
-      case 'iluminação':
-        return {'orgao': 'Energisa', 'contato': '0800 083 0196'};
-      case 'saneamento':
-        return {'orgao': 'Cagepa', 'contato': '115'};
-      case 'segurança':
-        return {
-          'orgao': 'Polícia Militar / Guarda Municipal',
-          'contato': '190 / 153'
-        };
-      case 'limpeza urbana':
-        return {'orgao': 'EMLUR', 'contato': '(83) 3214-7628'};
-      case 'desastre natural':
-        return {'orgao': 'Defesa Civil', 'contato': '199'};
-      default:
-        return {'orgao': 'Prefeitura Municipal', 'contato': '156'};
-    }
-  }
-
-  void _abrirModalDetalhes(BuildContext context, Chamado chamado) {
-    final infoOrgao = _getOrgaoResponsavel(chamado.categoria);
-
-    // Modal SOMENTE LEITURA para o Cidadão
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text(chamado.titulo),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Categoria: ${chamado.categoria}',
-                  style: const TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              Text('Descrição: ${chamado.descricao}'),
-              const SizedBox(height: 8),
-              Text('Local: ${chamado.rua}, ${chamado.bairro}'),
-              const SizedBox(height: 16),
-
-              // Nova seção de Contato de Emergência/Órgão
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                    color: Colors.blue.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.blue.shade200)),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Órgão Responsável:',
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                            color: Colors.blue)),
-                    Text(
-                        '${infoOrgao['orgao']} - Ligue ${infoOrgao['contato']}',
-                        style: const TextStyle(fontSize: 14)),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 16),
-              const Divider(),
-              Text('Status: ${chamado.status}',
-                  style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: chamado.status == 'Concluído'
-                          ? Colors.green
-                          : Colors.orange)),
-              const SizedBox(height: 8),
-              Text('Aberto há: ${_calcularTempoAberto(chamado.dataAbertura)}'),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Fechar'),
-            )
-          ],
-        );
-      },
-    );
-  }
+class _DashboardAuditorScreenState extends State<DashboardAuditorScreen> {
+  int _indiceAbaAtual = 0;
 
   @override
   Widget build(BuildContext context) {
     final isBright = Theme.of(context).brightness == Brightness.light;
-    final provider = Provider.of<ChamadosProvider>(context);
-
-    final chamadosFiltrados = provider.chamados.where((c) {
-      final query = _searchQuery.toLowerCase();
-      return c.titulo.toLowerCase().contains(query) ||
-          c.bairro.toLowerCase().contains(query);
-    }).toList();
+    final List<Widget> telas = [
+      const _OperacionalTab(),
+      const _EstatisticasTab()
+    ];
 
     return Scaffold(
       appBar: AppBar(
@@ -155,77 +59,386 @@ class _DashboardCidadaoScreenState extends State<DashboardCidadaoScreen> {
           ),
         ],
       ),
-      body: provider.isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
+      body: telas[_indiceAbaAtual],
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _indiceAbaAtual,
+        onDestinationSelected: (int index) =>
+            setState(() => _indiceAbaAtual = index),
+        destinations: const [
+          NavigationDestination(
+              icon: Icon(Icons.list_alt), label: 'Operacional'),
+          NavigationDestination(
+              icon: Icon(Icons.insights), label: 'Painel Gerencial'),
+        ],
+      ),
+      floatingActionButton: _indiceAbaAtual == 0
+          ? FloatingActionButton(
+              onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (context) => const CadastroScreen())),
+              child: const Icon(Icons.add),
+            )
+          : null,
+    );
+  }
+}
+
+// ABA 1: OPERACIONAL (Listagem com permissão de edição)
+class _OperacionalTab extends StatefulWidget {
+  const _OperacionalTab();
+  @override
+  State<_OperacionalTab> createState() => _OperacionalTabState();
+}
+
+class _OperacionalTabState extends State<_OperacionalTab> {
+  String _searchQuery = '';
+
+  String _calcularTempoAberto(DateTime dataAbertura) {
+    final diferenca = DateTime.now().difference(dataAbertura);
+    if (diferenca.inDays > 0) return '${diferenca.inDays} dia(s) atrás';
+    if (diferenca.inHours > 0) return '${diferenca.inHours} hora(s) atrás';
+    if (diferenca.inMinutes > 0)
+      return '${diferenca.inMinutes} minuto(s) atrás';
+    return 'Agora mesmo';
+  }
+
+  void _abrirModalStatus(BuildContext context, Chamado chamado) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(chamado.titulo),
+          content: SingleChildScrollView(
+            // Previne quebra de ecrã se a imagem for grande
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Correção do Overflow na linha abaixo
-                Padding(
-                  padding:
-                      const EdgeInsets.only(top: 16.0, left: 16.0, right: 16.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      // O Expanded avisa ao Flutter que o texto pode se adaptar e quebrar linha se não couber
-                      const Expanded(
-                        child: Text(
-                          'Lista de Problemas Públicos',
-                          style: TextStyle(
-                              fontSize: 18, fontWeight: FontWeight.bold),
-                        ),
+                // Renderização da imagem via Base64 (Task 19)
+                if (chamado.imagemBase64 != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 16.0),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.memory(
+                        base64Decode(chamado.imagemBase64!),
+                        height: 200,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
                       ),
-                      const SizedBox(
-                          width:
-                              8), // Dá um respiro para o texto não colar no botão
-                      Chip(
-                        label: Text('${provider.chamados.length} chamados'),
-                        backgroundColor: Colors.blue.withOpacity(0.1),
-                      ),
-                    ],
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 16.0, vertical: 16.0),
-                  child: TextField(
-                    decoration: InputDecoration(
-                      labelText: 'Buscar chamados...',
-                      hintText: 'Digite o título ou bairro',
-                      prefixIcon: const Icon(Icons.search),
-                      border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12.0)),
                     ),
-                    onChanged: (value) => setState(() => _searchQuery = value),
                   ),
-                ),
-                Expanded(
-                  child: chamadosFiltrados.isEmpty
-                      ? const Center(child: Text('Nenhum chamado encontrado.'))
-                      : ListView.builder(
-                          itemCount: chamadosFiltrados.length,
-                          itemBuilder: (context, index) {
-                            final c = chamadosFiltrados[index];
-                            return ListTile(
-                              leading: const Icon(Icons.report_problem,
-                                  color: Colors.blueGrey),
-                              title: Text(c.titulo,
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.bold)),
-                              subtitle: Text(
-                                  '${c.categoria} • ${c.rua}, ${c.bairro}'),
-                              trailing: Chip(label: Text(c.status)),
-                              onTap: () => _abrirModalDetalhes(context, c),
-                            );
-                          },
-                        ),
-                ),
+                Text('Descrição: ${chamado.descricao}'),
+                const SizedBox(height: 8),
+                Text('Local: ${chamado.rua}, ${chamado.bairro}'),
+                const SizedBox(height: 16),
+                const Divider(),
+                Text('Status atual: ${chamado.status}',
+                    style: const TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                Text(
+                    'Aberto há: ${_calcularTempoAberto(chamado.dataAbertura)}'),
+                const SizedBox(height: 16),
+
+                // Botões de edição exclusivos para Auditor
+                const Text('Alterar status para:'),
+                Wrap(
+                  spacing: 8.0,
+                  children: [
+                    ActionChip(
+                        label: const Text('Andamento'),
+                        onPressed: () => _atualizarStatus(
+                            context, chamado.id, 'Em andamento')),
+                    ActionChip(
+                        label: const Text('Concluído'),
+                        backgroundColor: Colors.green.shade100,
+                        onPressed: () =>
+                            _atualizarStatus(context, chamado.id, 'Concluído')),
+                  ],
+                )
               ],
             ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => Navigator.push(context,
-            MaterialPageRoute(builder: (context) => const CadastroScreen())),
-        icon: const Icon(Icons.add),
-        label: const Text('Novo Chamado'),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Fechar'))
+          ],
+        );
+      },
+    );
+  }
+
+  void _atualizarStatus(
+      BuildContext context, String id, String novoStatus) async {
+    try {
+      await Provider.of<ChamadosProvider>(context, listen: false)
+          .atualizarStatus(id, novoStatus);
+      if (context.mounted) Navigator.pop(context);
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(e.toString()), backgroundColor: Colors.red));
+      }
+    }
+  }
+
+  Widget _buildCard(String titulo, int valor, Color cor) {
+    return Card(
+      elevation: 2,
+      child: Container(
+        width: MediaQuery.of(context).size.width * 0.42,
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            Text(titulo,
+                style: TextStyle(color: cor, fontWeight: FontWeight.bold)),
+            Text('$valor', style: const TextStyle(fontSize: 24)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = Provider.of<ChamadosProvider>(context);
+    if (provider.isLoading)
+      return const Center(child: CircularProgressIndicator());
+
+    final chamados = provider.chamados;
+    final chamadosFiltrados = chamados.where((c) {
+      final query = _searchQuery.toLowerCase();
+      return c.titulo.toLowerCase().contains(query) ||
+          c.bairro.toLowerCase().contains(query);
+    }).toList();
+
+    final sortedChamados = List<Chamado>.from(chamadosFiltrados);
+    sortedChamados.sort((a, b) {
+      int peso(String p) {
+        if (p == 'crítica') return 4;
+        if (p == 'alta') return 3;
+        if (p == 'média') return 2;
+        return 1;
+      }
+
+      return peso(b.prioridade.toLowerCase())
+          .compareTo(peso(a.prioridade.toLowerCase()));
+    });
+
+    final abertos = provider.chamadosAbertos.length;
+    final emAndamento =
+        chamados.where((c) => c.status == 'Em andamento').length;
+    final concluidos = chamados.where((c) => c.status == 'Concluído').length;
+    final criticos = provider.chamadosCriticos.length;
+
+    return Column(
+      children: [
+        if (criticos > 5)
+          Container(
+              color: Colors.redAccent,
+              width: double.infinity,
+              padding: const EdgeInsets.all(8.0),
+              child: const Text('ALERTA: Mais de 5 chamados críticos!',
+                  style: TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center)),
+        Padding(
+          padding: const EdgeInsets.all(12.0),
+          child: Wrap(
+            spacing: 8.0,
+            runSpacing: 8.0,
+            alignment: WrapAlignment.center,
+            children: [
+              _buildCard('Abertos', abertos, Colors.blue),
+              _buildCard('Andamento', emAndamento, Colors.orange),
+              _buildCard('Concluídos', concluidos, Colors.green),
+              _buildCard('Críticos', criticos, Colors.red),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+          child: TextField(
+            decoration: InputDecoration(
+                labelText: 'Buscar chamados...',
+                prefixIcon: const Icon(Icons.search),
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12.0))),
+            onChanged: (value) => setState(() => _searchQuery = value),
+          ),
+        ),
+        const Divider(),
+        Expanded(
+          child: sortedChamados.isEmpty
+              ? const Center(child: Text('Nenhum chamado encontrado.'))
+              : ListView.builder(
+                  itemCount: sortedChamados.length,
+                  itemBuilder: (context, index) {
+                    final c = sortedChamados[index];
+                    return ListTile(
+                      leading: const Icon(Icons.report_problem),
+                      title: Text(c.titulo,
+                          style: const TextStyle(fontWeight: FontWeight.bold)),
+                      subtitle: Text(
+                          '${c.categoria} • ${c.prioridade}\n${c.rua}, ${c.bairro}\n${_calcularTempoAberto(c.dataAbertura)}'),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // Indicador visual de que o chamado possui anexo fotográfico
+                          if (c.imagemBase64 != null)
+                            const Icon(Icons.photo_camera,
+                                color: Colors.grey, size: 16),
+                          IconButton(
+                              icon: Icon(
+                                  c.isFavorito ? Icons.star : Icons.star_border,
+                                  color: c.isFavorito
+                                      ? Colors.amber
+                                      : Colors.grey),
+                              onPressed: () => provider.alternarFavorito(c.id)),
+                          Chip(label: Text(c.status)),
+                        ],
+                      ),
+                      onTap: () => _abrirModalStatus(context, c),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+// ABA 2: ESTATÍSTICAS E SLA
+class _EstatisticasTab extends StatelessWidget {
+  const _EstatisticasTab();
+
+  Widget _legenda(Color cor, String texto) {
+    return Row(children: [
+      Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(color: cor, shape: BoxShape.circle)),
+      const SizedBox(width: 8),
+      Text(texto, style: const TextStyle(fontWeight: FontWeight.w500))
+    ]);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = Provider.of<ChamadosProvider>(context);
+    final chamados = provider.chamados;
+    final abertos = provider.chamadosAbertos.length;
+    final andamento = chamados.where((c) => c.status == 'Em andamento').length;
+    final concluidos = chamados.where((c) => c.status == 'Concluído').length;
+    final ranking = provider.rankingDeBairros;
+    final mediaSLA = provider.tempoMedioResolucaoPorCategoria;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Distribuição de Chamados',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 16),
+          if (chamados.isNotEmpty)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                SizedBox(
+                  height: 140,
+                  width: 140,
+                  child: PieChart(PieChartData(
+                      sectionsSpace: 2,
+                      centerSpaceRadius: 40,
+                      sections: [
+                        if (abertos > 0)
+                          PieChartSectionData(
+                              color: Colors.blue,
+                              value: abertos.toDouble(),
+                              title: '$abertos',
+                              radius: 30,
+                              titleStyle: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold)),
+                        if (andamento > 0)
+                          PieChartSectionData(
+                              color: Colors.orange,
+                              value: andamento.toDouble(),
+                              title: '$andamento',
+                              radius: 30,
+                              titleStyle: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold)),
+                        if (concluidos > 0)
+                          PieChartSectionData(
+                              color: Colors.green,
+                              value: concluidos.toDouble(),
+                              title: '$concluidos',
+                              radius: 30,
+                              titleStyle: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold)),
+                      ])),
+                ),
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  _legenda(Colors.blue, 'Abertos'),
+                  const SizedBox(height: 8),
+                  _legenda(Colors.orange, 'Andamento'),
+                  const SizedBox(height: 8),
+                  _legenda(Colors.green, 'Concluídos')
+                ])
+              ],
+            )
+          else
+            const Center(child: Text('Dados insuficientes para o gráfico.')),
+          const SizedBox(height: 32),
+          const Divider(),
+          const Text('SLA - Tempo Médio de Resolução',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 16),
+          mediaSLA.isEmpty
+              ? const Text('Nenhum chamado concluído.')
+              : ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: mediaSLA.length,
+                  itemBuilder: (context, index) => Card(
+                      child: ListTile(
+                          leading: const Icon(Icons.timer),
+                          title: Text(
+                              mediaSLA.keys.elementAt(index).toUpperCase(),
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.bold)),
+                          trailing: Text(mediaSLA.values.elementAt(index),
+                              style: const TextStyle(
+                                  fontSize: 16,
+                                  color: Colors.green,
+                                  fontWeight: FontWeight.bold)))),
+                ),
+          const SizedBox(height: 32),
+          const Divider(),
+          const Text('Ranking de Bairros',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 16),
+          ranking.isEmpty
+              ? const Text('Sem registos.')
+              : ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: ranking.length,
+                  itemBuilder: (context, index) => ListTile(
+                      leading: CircleAvatar(child: Text('${index + 1}º')),
+                      title: Text(ranking.keys.elementAt(index),
+                          style: const TextStyle(fontWeight: FontWeight.bold)),
+                      trailing: Text(
+                          '${ranking.values.elementAt(index)} ocorrências')),
+                ),
+          const SizedBox(height: 40),
+        ],
       ),
     );
   }

@@ -11,10 +11,11 @@ class Chamado {
   DateTime? dataFechamento;
   String status;
 
-  // Novos campos para Funcionalidades Extras
+  // Campos para Funcionalidades Extras
   bool isFavorito;
   double? latitude;
   double? longitude;
+  String? imagemBase64; // Armazena a imagem codificada em texto
 
   Chamado({
     required this.id,
@@ -31,5 +32,6 @@ class Chamado {
     this.isFavorito = false,
     this.latitude,
     this.longitude,
+    this.imagemBase64,
   });
 }

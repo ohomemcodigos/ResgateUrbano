@@ -19,8 +19,8 @@ class DatabaseHelper {
     if (_database != null) return _database!;
 
     try {
-      // Alterado para v4
-      _database = await _initDB('soscidade_v4.db');
+      // Alterado para v5. Forçando atualização
+      _database = await _initDB('soscidade_v5.db');
       return _database!;
     } catch (e) {
       if (kIsWeb) {
@@ -35,11 +35,9 @@ class DatabaseHelper {
 
   Future<Database> _initDB(String filePath) async {
     if (kIsWeb) {
-      // Inicialização específica para o ambiente Web do FlutLab
       databaseFactory = databaseFactoryFfiWeb;
       return await openDatabase(filePath, version: 1, onCreate: _createDB);
     } else {
-      // Inicialização para Desktop/Mobile
       sqfliteFfiInit();
       databaseFactory = databaseFactoryFfi;
       final dbPath = await getDatabasesPath();
@@ -64,7 +62,8 @@ class DatabaseHelper {
       status TEXT NOT NULL,
       isFavorito INTEGER NOT NULL DEFAULT 0,
       latitude REAL,
-      longitude REAL
+      longitude REAL,
+      imagemBase64 TEXT
     )
     ''');
   }
@@ -92,6 +91,7 @@ class DatabaseHelper {
       'isFavorito': chamado.isFavorito ? 1 : 0,
       'latitude': chamado.latitude,
       'longitude': chamado.longitude,
+      'imagemBase64': chamado.imagemBase64, // Grava a string no SQLite
     });
   }
 
@@ -122,11 +122,12 @@ class DatabaseHelper {
               isFavorito: (json['isFavorito'] as int) == 1,
               latitude: json['latitude'] as double?,
               longitude: json['longitude'] as double?,
+              imagemBase64:
+                  json['imagemBase64'] as String?, // Lê a string da imagem
             ))
         .toList();
   }
 
-  // Refatorado para atualizar o status e salvar a data de fechamento simultaneamente
   Future<void> atualizarStatusEFechamento(
       String id, String status, DateTime? fechamento) async {
     final db = await instance.database;

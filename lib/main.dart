@@ -33,6 +33,7 @@ class _MyAppState extends State<MyApp> {
   bool get useLightMode {
     switch (_themeMode) {
       case ThemeMode.system:
+        // Correção: Uso do PlatformDispatcher no lugar do window
         return PlatformDispatcher.instance.platformBrightness ==
             Brightness.light;
       case ThemeMode.light:

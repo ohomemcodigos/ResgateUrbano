@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../models/chamado.dart';
 import '../providers/chamados_provider.dart';
+import '../services/via_cep_service.dart'; // IMPORTANTE: Import do serviço ViaCEP recuperado
 import '../theme/app_colors.dart';
 
 /// Formulário de registro de um novo chamado.
@@ -19,6 +20,7 @@ class _CadastroScreenState extends State<CadastroScreen> {
   final _formKey = GlobalKey<FormState>();
   final _tituloCtrl = TextEditingController();
   final _descricaoCtrl = TextEditingController();
+  final _cepCtrl = TextEditingController(); // Recuperado: Controller do CEP
   final _ruaCtrl = TextEditingController();
   final _bairroCtrl = TextEditingController();
   final _responsavelCtrl = TextEditingController();
@@ -38,21 +40,58 @@ class _CadastroScreenState extends State<CadastroScreen> {
   String _prioridade = 'Média';
   String? _imagemBase64;
   bool _salvando = false;
+  bool _buscandoCep = false; // Recuperado: Estado da busca de CEP
 
   @override
   void dispose() {
     _tituloCtrl.dispose();
     _descricaoCtrl.dispose();
+    _cepCtrl.dispose(); // Recuperado: Dispose do CEP
     _ruaCtrl.dispose();
     _bairroCtrl.dispose();
     _responsavelCtrl.dispose();
     super.dispose();
   }
 
+  // Recuperado: Função de busca de CEP e preenchimento automático
+  Future<void> _buscarCep() async {
+    final cep = _cepCtrl.text;
+    if (cep.isEmpty) return;
+
+    setState(() => _buscandoCep = true);
+
+    try {
+      final endereco = await ViaCepService.buscarEnderecoPorCep(cep);
+
+      setState(() {
+        _buscandoCep = false;
+        if (endereco != null) {
+          _ruaCtrl.text = endereco['rua'] ?? '';
+          _bairroCtrl.text = endereco['bairro'] ?? '';
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Endereço preenchido automaticamente!'),
+            backgroundColor: AppColors.statusConcluido,
+          ));
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('CEP não encontrado. Preencha os dados manualmente.'),
+            backgroundColor: Colors.orange,
+          ));
+        }
+      });
+    } catch (e) {
+      setState(() => _buscandoCep = false);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Erro ao consultar o serviço de CEP.'),
+        backgroundColor: AppColors.statusCritico,
+      ));
+    }
+  }
+
   Future<void> _selecionarImagem() async {
     final picker = ImagePicker();
-    final XFile? arquivo = await picker.pickImage(
-        source: ImageSource.gallery, imageQuality: 60);
+    final XFile? arquivo =
+        await picker.pickImage(source: ImageSource.gallery, imageQuality: 60);
     if (arquivo != null) {
       final bytes = await arquivo.readAsBytes();
       setState(() => _imagemBase64 = base64Encode(bytes));
@@ -130,8 +169,7 @@ class _CadastroScreenState extends State<CadastroScreen> {
                           const SizedBox(height: 8),
                           Text('Adicionar foto (opcional)',
                               style: theme.textTheme.bodySmall?.copyWith(
-                                  color:
-                                      theme.colorScheme.onSurfaceVariant)),
+                                  color: theme.colorScheme.onSurfaceVariant)),
                         ],
                       )
                     : Image.memory(base64Decode(_imagemBase64!),
@@ -144,9 +182,8 @@ class _CadastroScreenState extends State<CadastroScreen> {
               controller: _tituloCtrl,
               decoration: const InputDecoration(
                   hintText: 'Ex.: Buraco na via principal'),
-              validator: (v) => (v == null || v.trim().isEmpty)
-                  ? 'Informe o título'
-                  : null,
+              validator: (v) =>
+                  (v == null || v.trim().isEmpty) ? 'Informe o título' : null,
             ),
             const SizedBox(height: 16),
             _label(theme, 'Descrição *'),
@@ -172,8 +209,8 @@ class _CadastroScreenState extends State<CadastroScreen> {
                         value: _categoria,
                         isExpanded: true,
                         items: _categorias
-                            .map((c) => DropdownMenuItem(
-                                value: c, child: Text(c)))
+                            .map((c) =>
+                                DropdownMenuItem(value: c, child: Text(c)))
                             .toList(),
                         onChanged: (v) =>
                             setState(() => _categoria = v ?? _categoria),
@@ -198,8 +235,7 @@ class _CadastroScreenState extends State<CadastroScreen> {
                                     width: 10,
                                     height: 10,
                                     decoration: BoxDecoration(
-                                      color:
-                                          AppColors.prioridadeColor(p),
+                                      color: AppColors.prioridadeColor(p),
                                       shape: BoxShape.circle,
                                     ),
                                   ),
@@ -216,27 +252,55 @@ class _CadastroScreenState extends State<CadastroScreen> {
               ],
             ),
             const SizedBox(height: 16),
-            _label(theme, 'Rua'),
+
+            // Recuperado: Campo de busca de CEP com o visual alinhado à nova UI
+            _label(theme, 'CEP (Busca Automática)'),
+            TextFormField(
+              controller: _cepCtrl,
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(
+                hintText: 'Digite apenas números',
+                suffixIcon: _buscandoCep
+                    ? const Padding(
+                        padding: EdgeInsets.all(12.0),
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : IconButton(
+                        icon: const Icon(Icons.search),
+                        onPressed: _buscarCep,
+                        tooltip: 'Buscar Endereço',
+                      ),
+              ),
+              onFieldSubmitted: (_) => _buscarCep(),
+            ),
+            const SizedBox(height: 16),
+
+            _label(theme, 'Rua *'),
             TextFormField(
               controller: _ruaCtrl,
               decoration: const InputDecoration(hintText: 'Nome da rua'),
+              validator: (v) => (v == null || v.trim().isEmpty)
+                  ? 'A rua não pode ficar vazia'
+                  : null,
             ),
             const SizedBox(height: 16),
             _label(theme, 'Bairro *'),
             TextFormField(
               controller: _bairroCtrl,
-              decoration:
-                  const InputDecoration(hintText: 'Nome do bairro'),
+              decoration: const InputDecoration(hintText: 'Nome do bairro'),
               validator: (v) => (v == null || v.trim().isEmpty)
                   ? 'O bairro não pode ficar vazio'
                   : null,
             ),
             const SizedBox(height: 16),
-            _label(theme, 'Responsável'),
+            _label(theme, 'Responsável *'),
             TextFormField(
               controller: _responsavelCtrl,
               decoration:
                   const InputDecoration(hintText: 'Quem está reportando'),
+              validator: (v) => (v == null || v.trim().isEmpty)
+                  ? 'Informe o responsável'
+                  : null,
             ),
             const SizedBox(height: 28),
             FilledButton.icon(
@@ -248,8 +312,7 @@ class _CadastroScreenState extends State<CadastroScreen> {
                       child: CircularProgressIndicator(
                           strokeWidth: 2, color: Colors.white))
                   : const Icon(Icons.send),
-              label:
-                  Text(_salvando ? 'Salvando...' : 'Registrar Chamado'),
+              label: Text(_salvando ? 'Salvando...' : 'Registrar Chamado'),
             ),
           ],
         ),

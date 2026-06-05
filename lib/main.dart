@@ -1,19 +1,25 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/date_symbol_data_local.dart';
+
+import 'theme/app_theme.dart';
 import 'providers/chamados_provider.dart';
 import 'providers/auth_provider.dart';
 import 'views/login_screen.dart';
 import 'views/dashboard_auditor.dart';
 import 'views/dashboard_cidadao.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await initializeDateFormatting('pt_BR', null);
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (context) => AuthProvider()),
+        ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(
-            create: (context) => ChamadosProvider()..carregarChamados()),
+          create: (_) => ChamadosProvider()..carregarChamados(),
+        ),
       ],
       child: const MyApp(),
     ),
@@ -33,7 +39,6 @@ class _MyAppState extends State<MyApp> {
   bool get useLightMode {
     switch (_themeMode) {
       case ThemeMode.system:
-        // Correção: Uso do PlatformDispatcher no lugar do window
         return PlatformDispatcher.instance.platformBrightness ==
             Brightness.light;
       case ThemeMode.light:
@@ -44,9 +49,8 @@ class _MyAppState extends State<MyApp> {
   }
 
   void _handleBrightnessChange(bool useLightMode) {
-    setState(() {
-      _themeMode = useLightMode ? ThemeMode.light : ThemeMode.dark;
-    });
+    setState(() =>
+        _themeMode = useLightMode ? ThemeMode.light : ThemeMode.dark);
   }
 
   @override
@@ -54,35 +58,24 @@ class _MyAppState extends State<MyApp> {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'SOS Cidade',
-      theme: ThemeData(
-          useMaterial3: true,
-          brightness: Brightness.light,
-          colorSchemeSeed: Colors.blue),
-      darkTheme: ThemeData(
-          useMaterial3: true,
-          brightness: Brightness.dark,
-          colorSchemeSeed: Colors.blue),
+      theme: AppTheme.light(),
+      darkTheme: AppTheme.dark(),
       themeMode: _themeMode,
       home: Consumer<AuthProvider>(
         builder: (context, auth, child) {
-          if (!auth.isLogado) {
-            return const LoginScreen();
-          }
+          if (!auth.isLogado) return const LoginScreen();
           if (auth.isAuditor) {
-            // Removido o 'const' que causava erro de compilação
             return DashboardAuditorScreen(
               title: 'Painel do Auditor',
               useLightMode: useLightMode,
               handleBrightnessChange: _handleBrightnessChange,
             );
-          } else {
-            // Removido o 'const' que causava erro de compilação
-            return DashboardCidadaoScreen(
-              title: 'SOS Cidade - Cidadão',
-              useLightMode: useLightMode,
-              handleBrightnessChange: _handleBrightnessChange,
-            );
           }
+          return DashboardCidadaoScreen(
+            title: 'SOS Cidade',
+            useLightMode: useLightMode,
+            handleBrightnessChange: _handleBrightnessChange,
+          );
         },
       ),
     );

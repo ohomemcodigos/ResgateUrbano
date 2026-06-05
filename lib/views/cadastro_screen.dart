@@ -1,12 +1,14 @@
-import 'dart:convert'; // Suporte de descodificação/codificação binária
-import 'dart:typed_data'; // Gestão de buffer de ficheiros
+import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:provider/provider.dart';
 import '../models/chamado.dart';
 import '../providers/chamados_provider.dart';
-import '../services/via_cep_service.dart';
+import '../services/via_cep_service.dart'; // IMPORTANTE: Import do serviço ViaCEP recuperado
+import '../theme/app_colors.dart';
 
+/// Formulário de registro de um novo chamado.
+/// Não aplica regra de negócio: apenas monta o Chamado e chama o provider.
 class CadastroScreen extends StatefulWidget {
   const CadastroScreen({super.key});
 
@@ -16,252 +18,312 @@ class CadastroScreen extends StatefulWidget {
 
 class _CadastroScreenState extends State<CadastroScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _tituloController = TextEditingController();
-  final _descricaoController = TextEditingController();
-  final _cepController = TextEditingController();
-  final _ruaController = TextEditingController();
-  final _bairroController = TextEditingController();
-  final _responsavelController = TextEditingController();
+  final _tituloCtrl = TextEditingController();
+  final _descricaoCtrl = TextEditingController();
+  final _cepCtrl = TextEditingController(); // Recuperado: Controller do CEP
+  final _ruaCtrl = TextEditingController();
+  final _bairroCtrl = TextEditingController();
+  final _responsavelCtrl = TextEditingController();
 
-  String _categoria = 'trânsito';
-  String _prioridade = 'baixa';
-  bool _buscandoCep = false;
-
-  // Variáveis para a gestão do anexo fotográfico
-  String? _imagemBase64;
-  final ImagePicker _picker = ImagePicker();
-
-  final _categorias = [
-    'trânsito',
-    'iluminação',
-    'saneamento',
-    'segurança',
-    'limpeza urbana',
-    'desastre natural'
+  // Valores EXATOS exigidos pelos filtros do ChamadosProvider.
+  static const _categorias = [
+    'Trânsito',
+    'Iluminação',
+    'Saneamento',
+    'Segurança',
+    'Limpeza urbana',
+    'Desastre natural',
   ];
-  final _prioridades = ['baixa', 'média', 'alta', 'crítica'];
+  static const _prioridades = ['Crítica', 'Alta', 'Média', 'Baixa'];
 
+  String _categoria = _categorias.first;
+  String _prioridade = 'Média';
+  String? _imagemBase64;
+  bool _salvando = false;
+  bool _buscandoCep = false; // Recuperado: Estado da busca de CEP
+
+  @override
+  void dispose() {
+    _tituloCtrl.dispose();
+    _descricaoCtrl.dispose();
+    _cepCtrl.dispose(); // Recuperado: Dispose do CEP
+    _ruaCtrl.dispose();
+    _bairroCtrl.dispose();
+    _responsavelCtrl.dispose();
+    super.dispose();
+  }
+
+  // Recuperado: Função de busca de CEP e preenchimento automático
   Future<void> _buscarCep() async {
-    final cep = _cepController.text;
+    final cep = _cepCtrl.text;
     if (cep.isEmpty) return;
 
     setState(() => _buscandoCep = true);
 
-    // Conexão ao serviço de autopreenchimento de moradas
-    final endereco = await ViaCepService.buscarEnderecoPorCep(cep);
+    try {
+      final endereco = await ViaCepService.buscarEnderecoPorCep(cep);
 
-    setState(() {
-      _buscandoCep = false;
-      if (endereco != null) {
-        _ruaController.text = endereco['rua'] ?? '';
-        _bairroController.text = endereco['bairro'] ?? '';
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('Endereço preenchido automaticamente!'),
-              backgroundColor: Colors.green),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text(
-                  'CEP não encontrado. Preencha os dados manualmente ou tente novamente.'),
-              backgroundColor: Colors.orange),
-        );
-      }
-    });
+      setState(() {
+        _buscandoCep = false;
+        if (endereco != null) {
+          _ruaCtrl.text = endereco['rua'] ?? '';
+          _bairroCtrl.text = endereco['bairro'] ?? '';
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Endereço preenchido automaticamente!'),
+            backgroundColor: AppColors.statusConcluido,
+          ));
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('CEP não encontrado. Preencha os dados manualmente.'),
+            backgroundColor: Colors.orange,
+          ));
+        }
+      });
+    } catch (e) {
+      setState(() => _buscandoCep = false);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Erro ao consultar o serviço de CEP.'),
+        backgroundColor: AppColors.statusCritico,
+      ));
+    }
   }
 
-  // Função central para a captura e conversão da imagem em texto (Base64)
-  Future<void> _capturarImagem(ImageSource fonte) async {
+  Future<void> _selecionarImagem() async {
+    final picker = ImagePicker();
+    final XFile? arquivo =
+        await picker.pickImage(source: ImageSource.gallery, imageQuality: 60);
+    if (arquivo != null) {
+      final bytes = await arquivo.readAsBytes();
+      setState(() => _imagemBase64 = base64Encode(bytes));
+    }
+  }
+
+  Future<void> _salvar() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _salvando = true);
+
+    final chamado = Chamado(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      titulo: _tituloCtrl.text.trim(),
+      descricao: _descricaoCtrl.text.trim(),
+      categoria: _categoria,
+      prioridade: _prioridade,
+      rua: _ruaCtrl.text.trim(),
+      bairro: _bairroCtrl.text.trim(),
+      responsavel: _responsavelCtrl.text.trim(),
+      dataAbertura: DateTime.now(),
+      status: 'Aberto',
+      isFavorito: false,
+      imagemBase64: _imagemBase64,
+    );
+
     try {
-      // Compressão configurada para 30% a fim de otimizar a carga no SQLite local
-      final XFile? image =
-          await _picker.pickImage(source: fonte, imageQuality: 30);
-      if (image != null) {
-        // Extrai os bytes da imagem
-        final Uint8List imageBytes = await image.readAsBytes();
-        setState(() {
-          _imagemBase64 = base64Encode(imageBytes);
-        });
+      await context.read<ChamadosProvider>().adicionarChamado(chamado);
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Chamado registrado com sucesso!'),
+          backgroundColor: AppColors.statusConcluido,
+        ));
       }
     } catch (e) {
+      // Regra de negócio (ex.: título duplicado) vem do provider.
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Erro ao processar imagem.')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: AppColors.statusCritico,
+        ));
       }
+    } finally {
+      if (mounted) setState(() => _salvando = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(title: const Text('Novo Chamado')),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Form(
-          key: _formKey,
-          child: ListView(
-            children: [
-              TextFormField(
-                controller: _tituloController,
-                decoration: const InputDecoration(labelText: 'Título'),
-                validator: (v) =>
-                    v == null || v.isEmpty ? 'Campo obrigatório' : null,
-              ),
-              TextFormField(
-                controller: _descricaoController,
-                decoration:
-                    const InputDecoration(labelText: 'Descrição do Problema'),
-                maxLines: 3,
-                validator: (v) => v == null || v.trim().isEmpty
-                    ? 'Não permitir descrição vazia'
-                    : null,
-              ),
-
-              const SizedBox(height: 24),
-              // Área de anexo de evidências fotográficas
-              const Text('Evidência Fotográfica (Opcional)',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              const SizedBox(height: 8),
-              Container(
-                height: 150,
-                width: double.infinity,
+      body: Form(
+        key: _formKey,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+          children: [
+            GestureDetector(
+              onTap: _selecionarImagem,
+              child: Container(
+                height: 160,
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade200,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.grey.shade400, width: 2),
+                  color: theme.colorScheme.surfaceContainerHighest
+                      .withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: theme.dividerColor),
                 ),
-                child: _imagemBase64 != null
-                    ? ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: Image.memory(base64Decode(_imagemBase64!),
-                            fit: BoxFit.cover),
+                clipBehavior: Clip.antiAlias,
+                child: _imagemBase64 == null
+                    ? Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.add_a_photo_outlined,
+                              color: theme.colorScheme.onSurfaceVariant),
+                          const SizedBox(height: 8),
+                          Text('Adicionar foto (opcional)',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant)),
+                        ],
                       )
-                    : const Center(
-                        child: Icon(Icons.camera_alt,
-                            size: 50, color: Colors.grey)),
+                    : Image.memory(base64Decode(_imagemBase64!),
+                        fit: BoxFit.cover, width: double.infinity),
               ),
-              const SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  OutlinedButton.icon(
-                    onPressed: () => _capturarImagem(ImageSource.camera),
-                    icon: const Icon(Icons.camera),
-                    label: const Text('Câmara'),
+            ),
+            const SizedBox(height: 20),
+            _label(theme, 'Título *'),
+            TextFormField(
+              controller: _tituloCtrl,
+              decoration: const InputDecoration(
+                  hintText: 'Ex.: Buraco na via principal'),
+              validator: (v) =>
+                  (v == null || v.trim().isEmpty) ? 'Informe o título' : null,
+            ),
+            const SizedBox(height: 16),
+            _label(theme, 'Descrição *'),
+            TextFormField(
+              controller: _descricaoCtrl,
+              maxLines: 4,
+              decoration: const InputDecoration(
+                  hintText: 'Descreva o problema com detalhes'),
+              validator: (v) => (v == null || v.trim().isEmpty)
+                  ? 'A descrição não pode ficar vazia'
+                  : null,
+            ),
+            const SizedBox(height: 16),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _label(theme, 'Categoria'),
+                      DropdownButtonFormField<String>(
+                        value: _categoria,
+                        isExpanded: true,
+                        items: _categorias
+                            .map((c) =>
+                                DropdownMenuItem(value: c, child: Text(c)))
+                            .toList(),
+                        onChanged: (v) =>
+                            setState(() => _categoria = v ?? _categoria),
+                      ),
+                    ],
                   ),
-                  OutlinedButton.icon(
-                    onPressed: () => _capturarImagem(ImageSource.gallery),
-                    icon: const Icon(Icons.photo_library),
-                    label: const Text('Galeria'),
-                  ),
-                  if (_imagemBase64 != null)
-                    IconButton(
-                      icon: const Icon(Icons.delete, color: Colors.red),
-                      onPressed: () => setState(() => _imagemBase64 = null),
-                      tooltip: 'Remover imagem',
-                    )
-                ],
-              ),
-
-              const SizedBox(height: 24),
-              const Text('Localização',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              TextFormField(
-                controller: _cepController,
-                decoration: InputDecoration(
-                  labelText: 'CEP (Busca Automática via API)',
-                  hintText: 'Digite apenas números',
-                  suffixIcon: _buscandoCep
-                      ? const Padding(
-                          padding: EdgeInsets.all(12.0),
-                          child: CircularProgressIndicator(strokeWidth: 2))
-                      : IconButton(
-                          icon: const Icon(Icons.search),
-                          onPressed: _buscarCep,
-                          tooltip: 'Buscar Endereço'),
                 ),
-                keyboardType: TextInputType.number,
-                onFieldSubmitted: (_) => _buscarCep(),
-              ),
-              TextFormField(
-                controller: _ruaController,
-                decoration:
-                    const InputDecoration(labelText: 'Logradouro / Rua'),
-                validator: (v) =>
-                    v == null || v.trim().isEmpty ? 'Rua é obrigatória' : null,
-              ),
-              TextFormField(
-                controller: _bairroController,
-                decoration: const InputDecoration(labelText: 'Bairro'),
-                validator: (v) => v == null || v.trim().isEmpty
-                    ? 'Não permitir bairro vazio'
-                    : null,
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _responsavelController,
-                decoration:
-                    const InputDecoration(labelText: 'Nome do Reportante'),
-                validator: (v) =>
-                    v == null || v.isEmpty ? 'Campo obrigatório' : null,
-              ),
-              DropdownButtonFormField<String>(
-                value: _categoria,
-                decoration: const InputDecoration(
-                    labelText: 'Categoria de Atendimento'),
-                items: _categorias
-                    .map((c) => DropdownMenuItem(value: c, child: Text(c)))
-                    .toList(),
-                onChanged: (v) => setState(() => _categoria = v!),
-              ),
-              DropdownButtonFormField<String>(
-                value: _prioridade,
-                decoration:
-                    const InputDecoration(labelText: 'Nível de Prioridade'),
-                items: _prioridades
-                    .map((p) => DropdownMenuItem(value: p, child: Text(p)))
-                    .toList(),
-                onChanged: (v) => setState(() => _prioridade = v!),
-              ),
-              const SizedBox(height: 32),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16)),
-                onPressed: () async {
-                  if (_formKey.currentState!.validate()) {
-                    final novo = Chamado(
-                      id: DateTime.now().millisecondsSinceEpoch.toString(),
-                      titulo: _tituloController.text.trim(),
-                      descricao: _descricaoController.text.trim(),
-                      categoria: _categoria,
-                      prioridade: _prioridade,
-                      rua: _ruaController.text.trim(),
-                      bairro: _bairroController.text.trim(),
-                      responsavel: _responsavelController.text.trim(),
-                      dataAbertura: DateTime.now(),
-                      imagemBase64: _imagemBase64, // Anexando a string gerada
-                    );
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _label(theme, 'Prioridade'),
+                      DropdownButtonFormField<String>(
+                        value: _prioridade,
+                        isExpanded: true,
+                        items: _prioridades
+                            .map((p) => DropdownMenuItem(
+                                value: p,
+                                child: Row(children: [
+                                  Container(
+                                    width: 10,
+                                    height: 10,
+                                    decoration: BoxDecoration(
+                                      color: AppColors.prioridadeColor(p),
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(p),
+                                ])))
+                            .toList(),
+                        onChanged: (v) =>
+                            setState(() => _prioridade = v ?? _prioridade),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
 
-                    try {
-                      await Provider.of<ChamadosProvider>(context,
-                              listen: false)
-                          .adicionarChamado(novo);
-                      if (context.mounted) Navigator.pop(context);
-                    } catch (e) {
-                      ScaffoldMessenger.of(context)
-                          .showSnackBar(SnackBar(content: Text(e.toString())));
-                    }
-                  }
-                },
-                child: const Text('Submeter Chamado Oficial',
-                    style: TextStyle(fontSize: 16)),
+            // Recuperado: Campo de busca de CEP com o visual alinhado à nova UI
+            _label(theme, 'CEP (Busca Automática)'),
+            TextFormField(
+              controller: _cepCtrl,
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(
+                hintText: 'Digite apenas números',
+                suffixIcon: _buscandoCep
+                    ? const Padding(
+                        padding: EdgeInsets.all(12.0),
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : IconButton(
+                        icon: const Icon(Icons.search),
+                        onPressed: _buscarCep,
+                        tooltip: 'Buscar Endereço',
+                      ),
               ),
-              const SizedBox(height: 40),
-            ],
-          ),
+              onFieldSubmitted: (_) => _buscarCep(),
+            ),
+            const SizedBox(height: 16),
+
+            _label(theme, 'Rua *'),
+            TextFormField(
+              controller: _ruaCtrl,
+              decoration: const InputDecoration(hintText: 'Nome da rua'),
+              validator: (v) => (v == null || v.trim().isEmpty)
+                  ? 'A rua não pode ficar vazia'
+                  : null,
+            ),
+            const SizedBox(height: 16),
+            _label(theme, 'Bairro *'),
+            TextFormField(
+              controller: _bairroCtrl,
+              decoration: const InputDecoration(hintText: 'Nome do bairro'),
+              validator: (v) => (v == null || v.trim().isEmpty)
+                  ? 'O bairro não pode ficar vazio'
+                  : null,
+            ),
+            const SizedBox(height: 16),
+            _label(theme, 'Responsável *'),
+            TextFormField(
+              controller: _responsavelCtrl,
+              decoration:
+                  const InputDecoration(hintText: 'Quem está reportando'),
+              validator: (v) => (v == null || v.trim().isEmpty)
+                  ? 'Informe o responsável'
+                  : null,
+            ),
+            const SizedBox(height: 28),
+            FilledButton.icon(
+              onPressed: _salvando ? null : _salvar,
+              icon: _salvando
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                  : const Icon(Icons.send),
+              label: Text(_salvando ? 'Salvando...' : 'Registrar Chamado'),
+            ),
+          ],
         ),
       ),
     );
   }
+
+  Widget _label(ThemeData theme, String texto) => Padding(
+        padding: const EdgeInsets.only(bottom: 6),
+        child: Text(texto,
+            style: theme.textTheme.labelLarge
+                ?.copyWith(fontWeight: FontWeight.w600)),
+      );
 }

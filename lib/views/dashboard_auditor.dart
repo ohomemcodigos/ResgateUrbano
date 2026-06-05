@@ -1,15 +1,19 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../providers/chamados_provider.dart';
 import '../providers/auth_provider.dart';
 import '../models/chamado.dart';
+import '../theme/app_colors.dart';
+import '../widgets/stat_card.dart';
+import '../widgets/chamado_tile.dart';
+import '../widgets/status_badge.dart';
+import '../widgets/empty_state.dart';
+import '../widgets/section_header.dart';
 import 'cadastro_screen.dart';
 
-// Ecrã exclusivo para perfis com permissão administrativa (Auditor).
-// Fornece acesso a gráficos, métricas de SLA e edição de status.
+/// Painel administrativo (auditor): métricas, edição de status, gráficos e SLA.
 class DashboardAuditorScreen extends StatefulWidget {
   const DashboardAuditorScreen({
     super.key,
@@ -26,65 +30,58 @@ class DashboardAuditorScreen extends StatefulWidget {
 }
 
 class _DashboardAuditorScreenState extends State<DashboardAuditorScreen> {
-  int _indiceAbaAtual = 0;
+  int _indice = 0;
 
   @override
   Widget build(BuildContext context) {
     final isBright = Theme.of(context).brightness == Brightness.light;
-    final List<Widget> telas = [
-      const _OperacionalTab(),
-      const _EstatisticasTab()
-    ];
+    final telas = const [_OperacionalTab(), _EstatisticasTab()];
 
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.title),
         actions: [
-          Tooltip(
-            message: 'Alternar tema',
-            child: IconButton(
-              icon: isBright
-                  ? const Icon(Icons.dark_mode_outlined)
-                  : const Icon(Icons.light_mode_outlined),
-              onPressed: () => widget.handleBrightnessChange(!isBright),
-            ),
+          IconButton(
+            tooltip: 'Alternar tema',
+            icon: Icon(isBright
+                ? Icons.dark_mode_outlined
+                : Icons.light_mode_outlined),
+            onPressed: () => widget.handleBrightnessChange(!isBright),
           ),
-          Tooltip(
-            message: 'Sair',
-            child: IconButton(
-              icon: const Icon(Icons.logout),
-              onPressed: () => Provider.of<AuthProvider>(context, listen: false)
-                  .fazerLogout(),
-            ),
+          IconButton(
+            tooltip: 'Sair',
+            icon: const Icon(Icons.logout),
+            onPressed: () => context.read<AuthProvider>().fazerLogout(),
           ),
         ],
       ),
-      body: telas[_indiceAbaAtual],
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _indiceAbaAtual,
-        onDestinationSelected: (int index) =>
-            setState(() => _indiceAbaAtual = index),
-        destinations: const [
-          NavigationDestination(
-              icon: Icon(Icons.list_alt), label: 'Operacional'),
-          NavigationDestination(
-              icon: Icon(Icons.insights), label: 'Painel Gerencial'),
-        ],
-      ),
-      floatingActionButton: _indiceAbaAtual == 0
+      body: telas[_indice],
+      floatingActionButton: _indice == 0
           ? FloatingActionButton(
-              onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) => const CadastroScreen())),
+              onPressed: () => Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const CadastroScreen())),
               child: const Icon(Icons.add),
             )
           : null,
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _indice,
+        onDestinationSelected: (i) => setState(() => _indice = i),
+        destinations: const [
+          NavigationDestination(
+              icon: Icon(Icons.list_alt_outlined),
+              selectedIcon: Icon(Icons.list_alt),
+              label: 'Operacional'),
+          NavigationDestination(
+              icon: Icon(Icons.insights_outlined),
+              selectedIcon: Icon(Icons.insights),
+              label: 'Painel'),
+        ],
+      ),
     );
   }
 }
 
-// ABA 1: OPERACIONAL (Listagem com permissão de edição)
+// ===== ABA 1: OPERACIONAL =====
 class _OperacionalTab extends StatefulWidget {
   const _OperacionalTab();
   @override
@@ -94,108 +91,115 @@ class _OperacionalTab extends StatefulWidget {
 class _OperacionalTabState extends State<_OperacionalTab> {
   String _searchQuery = '';
 
-  String _calcularTempoAberto(DateTime dataAbertura) {
-    final diferenca = DateTime.now().difference(dataAbertura);
-    if (diferenca.inDays > 0) return '${diferenca.inDays} dia(s) atrás';
-    if (diferenca.inHours > 0) return '${diferenca.inHours} hora(s) atrás';
-    if (diferenca.inMinutes > 0)
-      return '${diferenca.inMinutes} minuto(s) atrás';
+  String _calcularTempoAberto(DateTime d0) {
+    final d = DateTime.now().difference(d0);
+    if (d.inDays > 0) return '${d.inDays} dia(s) atrás';
+    if (d.inHours > 0) return '${d.inHours} hora(s) atrás';
+    if (d.inMinutes > 0) return '${d.inMinutes} minuto(s) atrás';
     return 'Agora mesmo';
   }
 
-  void _abrirModalStatus(BuildContext context, Chamado chamado) {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text(chamado.titulo),
-          content: SingleChildScrollView(
-            // Previne quebra de ecrã se a imagem for grande
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Renderização da imagem via Base64 (Task 19)
-                if (chamado.imagemBase64 != null)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 16.0),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image.memory(
-                        base64Decode(chamado.imagemBase64!),
-                        height: 200,
-                        width: double.infinity,
-                        fit: BoxFit.cover,
-                      ),
-                    ),
-                  ),
-                Text('Descrição: ${chamado.descricao}'),
-                const SizedBox(height: 8),
-                Text('Local: ${chamado.rua}, ${chamado.bairro}'),
-                const SizedBox(height: 16),
-                const Divider(),
-                Text('Status atual: ${chamado.status}',
-                    style: const TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 8),
-                Text(
-                    'Aberto há: ${_calcularTempoAberto(chamado.dataAbertura)}'),
-                const SizedBox(height: 16),
-
-                // Botões de edição exclusivos para Auditor
-                const Text('Alterar status para:'),
-                Wrap(
-                  spacing: 8.0,
-                  children: [
-                    ActionChip(
-                        label: const Text('Andamento'),
-                        onPressed: () => _atualizarStatus(
-                            context, chamado.id, 'Em andamento')),
-                    ActionChip(
-                        label: const Text('Concluído'),
-                        backgroundColor: Colors.green.shade100,
-                        onPressed: () =>
-                            _atualizarStatus(context, chamado.id, 'Concluído')),
-                  ],
-                )
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Fechar'))
-          ],
-        );
-      },
-    );
-  }
-
-  void _atualizarStatus(
-      BuildContext context, String id, String novoStatus) async {
+  void _atualizarStatus(BuildContext context, String id, String novo) async {
     try {
-      await Provider.of<ChamadosProvider>(context, listen: false)
-          .atualizarStatus(id, novoStatus);
+      await context.read<ChamadosProvider>().atualizarStatus(id, novo);
       if (context.mounted) Navigator.pop(context);
     } catch (e) {
       if (context.mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(e.toString()), backgroundColor: Colors.red));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(e.toString()),
+            backgroundColor: AppColors.statusCritico));
       }
     }
   }
 
-  Widget _buildCard(String titulo, int valor, Color cor) {
-    return Card(
-      elevation: 2,
-      child: Container(
-        width: MediaQuery.of(context).size.width * 0.42,
-        padding: const EdgeInsets.all(16.0),
+  void _abrirModalStatus(BuildContext context, Chamado chamado) {
+    final theme = Theme.of(context);
+    final concluido = chamado.status.toLowerCase() == 'concluído';
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: theme.colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (context) => Padding(
+        padding: const EdgeInsets.all(20),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(titulo,
-                style: TextStyle(color: cor, fontWeight: FontWeight.bold)),
-            Text('$valor', style: const TextStyle(fontSize: 24)),
+            Center(
+              child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                      color: theme.dividerColor,
+                      borderRadius: BorderRadius.circular(2))),
+            ),
+            const SizedBox(height: 16),
+            if (chamado.imagemBase64 != null) ...[
+              ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: Image.memory(base64Decode(chamado.imagemBase64!),
+                    height: 180, width: double.infinity, fit: BoxFit.cover),
+              ),
+              const SizedBox(height: 16),
+            ],
+            Text(chamado.titulo,
+                style: theme.textTheme.titleLarge
+                    ?.copyWith(fontWeight: FontWeight.w700)),
+            const SizedBox(height: 8),
+            Row(children: [StatusBadge(status: chamado.status)]),
+            const SizedBox(height: 12),
+            Text('${chamado.rua}, ${chamado.bairro}',
+                style: theme.textTheme.bodyMedium
+                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+            const SizedBox(height: 4),
+            Text('Aberto há: ${_calcularTempoAberto(chamado.dataAbertura)}',
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+            const Divider(height: 28),
+            if (concluido)
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                    color: AppColors.statusConcluido.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12)),
+                child: Row(children: [
+                  const Icon(Icons.lock_outline,
+                      color: AppColors.statusConcluido, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                      child: Text('Chamado concluído não pode ser editado.',
+                          style: theme.textTheme.bodySmall)),
+                ]),
+              )
+            else ...[
+              Text('Alterar status',
+                  style: theme.textTheme.labelLarge
+                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+              const SizedBox(height: 10),
+              Row(children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () =>
+                        _atualizarStatus(context, chamado.id, 'Em andamento'),
+                    icon: const Icon(Icons.timelapse, size: 18),
+                    label: const Text('Andamento'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: () =>
+                        _atualizarStatus(context, chamado.id, 'Concluído'),
+                    icon: const Icon(Icons.check_circle_outline, size: 18),
+                    label: const Text('Concluir'),
+                  ),
+                ),
+              ]),
+            ],
+            const SizedBox(height: 12),
           ],
         ),
       ),
@@ -205,129 +209,159 @@ class _OperacionalTabState extends State<_OperacionalTab> {
   @override
   Widget build(BuildContext context) {
     final provider = Provider.of<ChamadosProvider>(context);
-    if (provider.isLoading)
+    if (provider.isLoading) {
       return const Center(child: CircularProgressIndicator());
+    }
 
     final chamados = provider.chamados;
-    final chamadosFiltrados = chamados.where((c) {
-      final query = _searchQuery.toLowerCase();
-      return c.titulo.toLowerCase().contains(query) ||
-          c.bairro.toLowerCase().contains(query);
+    final filtrados = chamados.where((c) {
+      final q = _searchQuery.toLowerCase();
+      return c.titulo.toLowerCase().contains(q) ||
+          c.bairro.toLowerCase().contains(q);
     }).toList();
 
-    final sortedChamados = List<Chamado>.from(chamadosFiltrados);
-    sortedChamados.sort((a, b) {
-      int peso(String p) {
-        if (p == 'crítica') return 4;
-        if (p == 'alta') return 3;
-        if (p == 'média') return 2;
-        return 1;
+    int peso(String p) {
+      switch (p.toLowerCase()) {
+        case 'crítica':
+          return 4;
+        case 'alta':
+          return 3;
+        case 'média':
+          return 2;
+        default:
+          return 1;
       }
+    }
 
-      return peso(b.prioridade.toLowerCase())
-          .compareTo(peso(a.prioridade.toLowerCase()));
-    });
+    final ordenados = List<Chamado>.from(filtrados)
+      ..sort((a, b) => peso(b.prioridade).compareTo(peso(a.prioridade)));
 
     final abertos = provider.chamadosAbertos.length;
-    final emAndamento =
-        chamados.where((c) => c.status == 'Em andamento').length;
+    final andamento = chamados.where((c) => c.status == 'Em andamento').length;
     final concluidos = chamados.where((c) => c.status == 'Concluído').length;
     final criticos = provider.chamadosCriticos.length;
 
-    return Column(
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
       children: [
         if (criticos > 5)
           Container(
-              color: Colors.redAccent,
-              width: double.infinity,
-              padding: const EdgeInsets.all(8.0),
-              child: const Text('ALERTA: Mais de 5 chamados críticos!',
-                  style: TextStyle(
-                      color: Colors.white, fontWeight: FontWeight.bold),
-                  textAlign: TextAlign.center)),
-        Padding(
-          padding: const EdgeInsets.all(12.0),
-          child: Wrap(
-            spacing: 8.0,
-            runSpacing: 8.0,
-            alignment: WrapAlignment.center,
-            children: [
-              _buildCard('Abertos', abertos, Colors.blue),
-              _buildCard('Andamento', emAndamento, Colors.orange),
-              _buildCard('Concluídos', concluidos, Colors.green),
-              _buildCard('Críticos', criticos, Colors.red),
-            ],
+            margin: const EdgeInsets.only(bottom: 16),
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppColors.statusCritico.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                  color: AppColors.statusCritico.withValues(alpha: 0.4)),
+            ),
+            child: Row(children: [
+              const Icon(Icons.warning_amber_rounded,
+                  color: AppColors.statusCritico),
+              const SizedBox(width: 10),
+              Expanded(
+                  child: Text('Alerta: mais de 5 chamados críticos ativos!',
+                      style: TextStyle(
+                          color: AppColors.statusCritico,
+                          fontWeight: FontWeight.w700))),
+            ]),
           ),
+        GridView.count(
+          crossAxisCount: 2,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 12,
+          crossAxisSpacing: 12,
+          childAspectRatio: 1.1,
+          children: [
+            StatCard(
+                label: 'Abertos',
+                value: abertos,
+                color: AppColors.statusAberto,
+                icon: Icons.folder_open_outlined),
+            StatCard(
+                label: 'Em andamento',
+                value: andamento,
+                color: AppColors.statusAndamento,
+                icon: Icons.timelapse),
+            StatCard(
+                label: 'Concluídos',
+                value: concluidos,
+                color: AppColors.statusConcluido,
+                icon: Icons.check_circle_outline),
+            StatCard(
+                label: 'Críticos',
+                value: criticos,
+                color: AppColors.statusCritico,
+                icon: Icons.priority_high),
+          ],
         ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-          child: TextField(
-            decoration: InputDecoration(
-                labelText: 'Buscar chamados...',
-                prefixIcon: const Icon(Icons.search),
-                border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12.0))),
-            onChanged: (value) => setState(() => _searchQuery = value),
-          ),
+        const SizedBox(height: 20),
+        TextField(
+          decoration: const InputDecoration(
+              hintText: 'Buscar chamados...', prefixIcon: Icon(Icons.search)),
+          onChanged: (v) => setState(() => _searchQuery = v),
         ),
-        const Divider(),
-        Expanded(
-          child: sortedChamados.isEmpty
-              ? const Center(child: Text('Nenhum chamado encontrado.'))
-              : ListView.builder(
-                  itemCount: sortedChamados.length,
-                  itemBuilder: (context, index) {
-                    final c = sortedChamados[index];
-                    return ListTile(
-                      leading: const Icon(Icons.report_problem),
-                      title: Text(c.titulo,
-                          style: const TextStyle(fontWeight: FontWeight.bold)),
-                      subtitle: Text(
-                          '${c.categoria} • ${c.prioridade}\n${c.rua}, ${c.bairro}\n${_calcularTempoAberto(c.dataAbertura)}'),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // Indicador visual de que o chamado possui anexo fotográfico
-                          if (c.imagemBase64 != null)
-                            const Icon(Icons.photo_camera,
-                                color: Colors.grey, size: 16),
-                          IconButton(
-                              icon: Icon(
-                                  c.isFavorito ? Icons.star : Icons.star_border,
-                                  color: c.isFavorito
-                                      ? Colors.amber
-                                      : Colors.grey),
-                              onPressed: () => provider.alternarFavorito(c.id)),
-                          Chip(label: Text(c.status)),
-                        ],
-                      ),
-                      onTap: () => _abrirModalStatus(context, c),
-                    );
-                  },
+        const SizedBox(height: 16),
+        const SectionHeader(title: 'Fila de Atendimento'),
+        const SizedBox(height: 12),
+        if (ordenados.isEmpty)
+          const Padding(
+            padding: EdgeInsets.only(top: 24),
+            child: EmptyState(
+                icon: Icons.task_alt, title: 'Nenhum chamado na fila'),
+          )
+        else
+          ...ordenados.map((c) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: ChamadoTile(
+                  chamado: c,
+                  onTap: () => _abrirModalStatus(context, c),
+                  trailing: IconButton(
+                    icon: Icon(c.isFavorito ? Icons.star : Icons.star_border,
+                        color: c.isFavorito
+                            ? Colors.amber
+                            : Theme.of(context).colorScheme.onSurfaceVariant),
+                    onPressed: () => provider.alternarFavorito(c.id),
+                  ),
                 ),
-        ),
+              )),
       ],
     );
   }
 }
 
-// ABA 2: ESTATÍSTICAS E SLA
+// ===== ABA 2: ESTATÍSTICAS E SLA =====
 class _EstatisticasTab extends StatelessWidget {
   const _EstatisticasTab();
 
   Widget _legenda(Color cor, String texto) {
-    return Row(children: [
+    return Row(mainAxisSize: MainAxisSize.min, children: [
       Container(
           width: 12,
           height: 12,
           decoration: BoxDecoration(color: cor, shape: BoxShape.circle)),
       const SizedBox(width: 8),
-      Text(texto, style: const TextStyle(fontWeight: FontWeight.w500))
+      Text(texto, style: const TextStyle(fontWeight: FontWeight.w500)),
     ]);
+  }
+
+  Widget _cardWrap(BuildContext context, Widget child) {
+    final theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: theme.dividerColor),
+      ),
+      child: child,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final provider = Provider.of<ChamadosProvider>(context);
     final chamados = provider.chamados;
     final abertos = provider.chamadosAbertos.length;
@@ -336,110 +370,139 @@ class _EstatisticasTab extends StatelessWidget {
     final ranking = provider.rankingDeBairros;
     final mediaSLA = provider.tempoMedioResolucaoPorCategoria;
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Distribuição de Chamados',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 16),
-          if (chamados.isNotEmpty)
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                SizedBox(
-                  height: 140,
-                  width: 140,
-                  child: PieChart(PieChartData(
-                      sectionsSpace: 2,
-                      centerSpaceRadius: 40,
-                      sections: [
-                        if (abertos > 0)
-                          PieChartSectionData(
-                              color: Colors.blue,
-                              value: abertos.toDouble(),
-                              title: '$abertos',
-                              radius: 30,
-                              titleStyle: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold)),
-                        if (andamento > 0)
-                          PieChartSectionData(
-                              color: Colors.orange,
-                              value: andamento.toDouble(),
-                              title: '$andamento',
-                              radius: 30,
-                              titleStyle: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold)),
-                        if (concluidos > 0)
-                          PieChartSectionData(
-                              color: Colors.green,
-                              value: concluidos.toDouble(),
-                              title: '$concluidos',
-                              radius: 30,
-                              titleStyle: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold)),
-                      ])),
-                ),
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  _legenda(Colors.blue, 'Abertos'),
-                  const SizedBox(height: 8),
-                  _legenda(Colors.orange, 'Andamento'),
-                  const SizedBox(height: 8),
-                  _legenda(Colors.green, 'Concluídos')
-                ])
-              ],
-            )
-          else
-            const Center(child: Text('Dados insuficientes para o gráfico.')),
-          const SizedBox(height: 32),
-          const Divider(),
-          const Text('SLA - Tempo Médio de Resolução',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 16),
-          mediaSLA.isEmpty
-              ? const Text('Nenhum chamado concluído.')
-              : ListView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: mediaSLA.length,
-                  itemBuilder: (context, index) => Card(
-                      child: ListTile(
-                          leading: const Icon(Icons.timer),
-                          title: Text(
-                              mediaSLA.keys.elementAt(index).toUpperCase(),
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.bold)),
-                          trailing: Text(mediaSLA.values.elementAt(index),
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        const SectionHeader(title: 'Distribuição de Chamados'),
+        const SizedBox(height: 12),
+        _cardWrap(
+            context,
+            chamados.isEmpty
+                ? const EmptyState(
+                    icon: Icons.pie_chart_outline, title: 'Dados insuficientes')
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      SizedBox(
+                        height: 150,
+                        width: 150,
+                        child: PieChart(PieChartData(
+                          sectionsSpace: 2,
+                          centerSpaceRadius: 42,
+                          sections: [
+                            if (abertos > 0)
+                              PieChartSectionData(
+                                  color: AppColors.statusAberto,
+                                  value: abertos.toDouble(),
+                                  title: '$abertos',
+                                  radius: 30,
+                                  titleStyle: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold)),
+                            if (andamento > 0)
+                              PieChartSectionData(
+                                  color: AppColors.statusAndamento,
+                                  value: andamento.toDouble(),
+                                  title: '$andamento',
+                                  radius: 30,
+                                  titleStyle: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold)),
+                            if (concluidos > 0)
+                              PieChartSectionData(
+                                  color: AppColors.statusConcluido,
+                                  value: concluidos.toDouble(),
+                                  title: '$concluidos',
+                                  radius: 30,
+                                  titleStyle: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold)),
+                          ],
+                        )),
+                      ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _legenda(AppColors.statusAberto, 'Abertos'),
+                          const SizedBox(height: 8),
+                          _legenda(AppColors.statusAndamento, 'Andamento'),
+                          const SizedBox(height: 8),
+                          _legenda(AppColors.statusConcluido, 'Concluídos'),
+                        ],
+                      ),
+                    ],
+                  )),
+        const SizedBox(height: 24),
+        const SectionHeader(title: 'SLA — Tempo Médio de Resolução'),
+        const SizedBox(height: 12),
+        _cardWrap(
+            context,
+            mediaSLA.isEmpty
+                ? Text('Nenhum chamado concluído ainda.',
+                    style: theme.textTheme.bodyMedium)
+                : Column(
+                    children: List.generate(mediaSLA.length, (i) {
+                      final cat = mediaSLA.keys.elementAt(i);
+                      final val = mediaSLA.values.elementAt(i);
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        child: Row(children: [
+                          Icon(AppColors.categoriaIcon(cat),
+                              size: 20, color: theme.colorScheme.primary),
+                          const SizedBox(width: 12),
+                          Expanded(
+                              child: Text(
+                                  cat.isEmpty
+                                      ? cat
+                                      : cat[0].toUpperCase() + cat.substring(1),
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w600))),
+                          Text(val,
                               style: const TextStyle(
-                                  fontSize: 16,
-                                  color: Colors.green,
-                                  fontWeight: FontWeight.bold)))),
-                ),
-          const SizedBox(height: 32),
-          const Divider(),
-          const Text('Ranking de Bairros',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 16),
-          ranking.isEmpty
-              ? const Text('Sem registos.')
-              : ListView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: ranking.length,
-                  itemBuilder: (context, index) => ListTile(
-                      leading: CircleAvatar(child: Text('${index + 1}º')),
-                      title: Text(ranking.keys.elementAt(index),
-                          style: const TextStyle(fontWeight: FontWeight.bold)),
-                      trailing: Text(
-                          '${ranking.values.elementAt(index)} ocorrências')),
-                ),
-          const SizedBox(height: 40),
-        ],
-      ),
+                                  color: AppColors.statusConcluido,
+                                  fontWeight: FontWeight.w700)),
+                        ]),
+                      );
+                    }),
+                  )),
+        const SizedBox(height: 24),
+        const SectionHeader(title: 'Ranking de Bairros'),
+        const SizedBox(height: 12),
+        _cardWrap(
+            context,
+            ranking.isEmpty
+                ? Text('Sem registros.', style: theme.textTheme.bodyMedium)
+                : Column(
+                    children: List.generate(ranking.length, (i) {
+                      final bairro = ranking.keys.elementAt(i);
+                      final qtd = ranking.values.elementAt(i);
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        child: Row(children: [
+                          CircleAvatar(
+                            radius: 14,
+                            backgroundColor: theme.colorScheme.primary
+                                .withValues(alpha: 0.12),
+                            child: Text('${i + 1}',
+                                style: TextStyle(
+                                    color: theme.colorScheme.primary,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 12)),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                              child: Text(bairro,
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w600))),
+                          Text('$qtd ocorrências',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant)),
+                        ]),
+                      );
+                    }),
+                  )),
+        const SizedBox(height: 40),
+      ],
     );
   }
 }

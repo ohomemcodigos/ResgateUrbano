@@ -4,10 +4,14 @@ import 'package:provider/provider.dart';
 import '../providers/chamados_provider.dart';
 import '../providers/auth_provider.dart';
 import '../models/chamado.dart';
+import '../theme/app_colors.dart';
+import '../widgets/dashboard_header.dart';
+import '../widgets/chamado_tile.dart';
+import '../widgets/status_badge.dart';
+import '../widgets/empty_state.dart';
 import 'cadastro_screen.dart';
 
-// Interface dedicada ao cidadão comum.
-// Bloqueia ações de edição e foca na transparência pública.
+/// Painel público do cidadão: somente leitura + registro de novos chamados.
 class DashboardCidadaoScreen extends StatefulWidget {
   const DashboardCidadaoScreen({
     super.key,
@@ -20,22 +24,21 @@ class DashboardCidadaoScreen extends StatefulWidget {
   final void Function(bool useLightMode) handleBrightnessChange;
 
   @override
-  State<DashboardCidadaoScreen> createState() => _DashboardCidadaoScreenState();
+  State<DashboardCidadaoScreen> createState() =>
+      _DashboardCidadaoScreenState();
 }
 
 class _DashboardCidadaoScreenState extends State<DashboardCidadaoScreen> {
   String _searchQuery = '';
 
   String _calcularTempoAberto(DateTime dataAbertura) {
-    final diferenca = DateTime.now().difference(dataAbertura);
-    if (diferenca.inDays > 0) return '${diferenca.inDays} dia(s) atrás';
-    if (diferenca.inHours > 0) return '${diferenca.inHours} hora(s) atrás';
-    if (diferenca.inMinutes > 0)
-      return '${diferenca.inMinutes} minuto(s) atrás';
+    final d = DateTime.now().difference(dataAbertura);
+    if (d.inDays > 0) return '${d.inDays} dia(s) atrás';
+    if (d.inHours > 0) return '${d.inHours} hora(s) atrás';
+    if (d.inMinutes > 0) return '${d.inMinutes} minuto(s) atrás';
     return 'Agora mesmo';
   }
 
-  // Mapeamento dinâmico de órgãos públicos e contactos de emergência
   Map<String, String> _getOrgaoResponsavel(String categoria) {
     switch (categoria.toLowerCase()) {
       case 'trânsito':
@@ -58,84 +61,118 @@ class _DashboardCidadaoScreenState extends State<DashboardCidadaoScreen> {
     }
   }
 
+  Widget _infoLinha(
+      ThemeData theme, IconData icon, String label, String valor) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 18, color: theme.colorScheme.onSurfaceVariant),
+          const SizedBox(width: 10),
+          Text('$label: ',
+              style: theme.textTheme.bodyMedium
+                  ?.copyWith(fontWeight: FontWeight.w600)),
+          Expanded(child: Text(valor, style: theme.textTheme.bodyMedium)),
+        ],
+      ),
+    );
+  }
+
   void _abrirModalDetalhes(BuildContext context, Chamado chamado) {
     final infoOrgao = _getOrgaoResponsavel(chamado.categoria);
-
-    // Modal formatado como "Read-Only"
-    showDialog(
+    final theme = Theme.of(context);
+    showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
+      backgroundColor: theme.colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
       builder: (context) {
-        return AlertDialog(
-          title: Text(chamado.titulo),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Verificação e exibição do anexo fotográfico
-                if (chamado.imagemBase64 != null)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 16.0),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image.memory(
-                        base64Decode(chamado.imagemBase64!),
-                        height: 200,
-                        width: double.infinity,
-                        fit: BoxFit.cover,
-                      ),
-                    ),
-                  ),
-                Text('Categoria: ${chamado.categoria}',
-                    style: const TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 8),
-                Text('Descrição: ${chamado.descricao}'),
-                const SizedBox(height: 8),
-                Text('Local: ${chamado.rua}, ${chamado.bairro}'),
-                const SizedBox(height: 16),
-
-                // Módulo de encaminhamento público para o cidadão
-                Container(
-                  padding: const EdgeInsets.all(8),
+        return DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.7,
+          maxChildSize: 0.92,
+          minChildSize: 0.4,
+          builder: (context, controller) => ListView(
+            controller: controller,
+            padding: const EdgeInsets.all(20),
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
                   decoration: BoxDecoration(
-                      color: Colors.blue.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.blue.shade200)),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Órgão Responsável:',
-                          style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
-                              color: Colors.blue)),
-                      Text(
-                          '${infoOrgao['orgao']} - Ligue ${infoOrgao['contato']}',
-                          style: const TextStyle(fontSize: 14)),
-                    ],
+                    color: theme.dividerColor,
+                    borderRadius: BorderRadius.circular(2),
                   ),
                 ),
-
+              ),
+              const SizedBox(height: 16),
+              if (chamado.imagemBase64 != null) ...[
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: Image.memory(
+                    base64Decode(chamado.imagemBase64!),
+                    height: 200,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                  ),
+                ),
                 const SizedBox(height: 16),
-                const Divider(),
-                Text('Status: ${chamado.status}',
-                    style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: chamado.status == 'Concluído'
-                            ? Colors.green
-                            : Colors.orange)),
-                const SizedBox(height: 8),
-                Text(
-                    'Aberto há: ${_calcularTempoAberto(chamado.dataAbertura)}'),
               ],
-            ),
+              Text(chamado.titulo,
+                  style: theme.textTheme.headlineSmall
+                      ?.copyWith(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 8),
+              Row(children: [StatusBadge(status: chamado.status)]),
+              const SizedBox(height: 16),
+              _infoLinha(theme, Icons.category_outlined, 'Categoria',
+                  chamado.categoria),
+              _infoLinha(theme, Icons.location_on_outlined, 'Local',
+                  '${chamado.rua}, ${chamado.bairro}'),
+              _infoLinha(theme, Icons.schedule, 'Aberto há',
+                  _calcularTempoAberto(chamado.dataAbertura)),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.brand.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(16),
+                  border:
+                      Border.all(color: AppColors.brand.withValues(alpha: 0.2)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(children: [
+                      const Icon(Icons.support_agent,
+                          color: AppColors.brand, size: 18),
+                      const SizedBox(width: 8),
+                      Text('Órgão Responsável',
+                          style: theme.textTheme.labelLarge?.copyWith(
+                              color: AppColors.brand,
+                              fontWeight: FontWeight.w700)),
+                    ]),
+                    const SizedBox(height: 6),
+                    Text('${infoOrgao['orgao']}',
+                        style: theme.textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w600)),
+                    Text('Contato: ${infoOrgao['contato']}',
+                        style: theme.textTheme.bodyMedium),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text('Descrição',
+                  style: theme.textTheme.labelLarge?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant)),
+              const SizedBox(height: 4),
+              Text(chamado.descricao, style: theme.textTheme.bodyMedium),
+              const SizedBox(height: 24),
+            ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Fechar'),
-            )
-          ],
         );
       },
     );
@@ -147,111 +184,74 @@ class _DashboardCidadaoScreenState extends State<DashboardCidadaoScreen> {
     final provider = Provider.of<ChamadosProvider>(context);
 
     final chamadosFiltrados = provider.chamados.where((c) {
-      final query = _searchQuery.toLowerCase();
-      return c.titulo.toLowerCase().contains(query) ||
-          c.bairro.toLowerCase().contains(query);
+      final q = _searchQuery.toLowerCase();
+      return c.titulo.toLowerCase().contains(q) ||
+          c.bairro.toLowerCase().contains(q);
     }).toList();
 
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.title),
         actions: [
-          Tooltip(
-            message: 'Alternar tema',
-            child: IconButton(
-              icon: isBright
-                  ? const Icon(Icons.dark_mode_outlined)
-                  : const Icon(Icons.light_mode_outlined),
-              onPressed: () => widget.handleBrightnessChange(!isBright),
-            ),
+          IconButton(
+            tooltip: 'Alternar tema',
+            icon: Icon(isBright
+                ? Icons.dark_mode_outlined
+                : Icons.light_mode_outlined),
+            onPressed: () => widget.handleBrightnessChange(!isBright),
           ),
-          Tooltip(
-            message: 'Sair',
-            child: IconButton(
-              icon: const Icon(Icons.logout),
-              onPressed: () => Provider.of<AuthProvider>(context, listen: false)
-                  .fazerLogout(),
-            ),
+          IconButton(
+            tooltip: 'Sair',
+            icon: const Icon(Icons.logout),
+            onPressed: () => context.read<AuthProvider>().fazerLogout(),
           ),
         ],
       ),
-      body: provider.isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                Padding(
-                  padding:
-                      const EdgeInsets.only(top: 16.0, left: 16.0, right: 16.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Expanded(
-                        child: Text(
-                          'Lista de Problemas Públicos',
-                          style: TextStyle(
-                              fontSize: 18, fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Chip(
-                        label: Text('${provider.chamados.length} chamados'),
-                        backgroundColor: Colors.blue.withOpacity(0.1),
-                      ),
-                    ],
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 16.0, vertical: 16.0),
-                  child: TextField(
-                    decoration: InputDecoration(
-                      labelText: 'Buscar chamados...',
-                      hintText: 'Digite o título ou bairro',
-                      prefixIcon: const Icon(Icons.search),
-                      border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12.0)),
-                    ),
-                    onChanged: (value) => setState(() => _searchQuery = value),
-                  ),
-                ),
-                Expanded(
-                  child: chamadosFiltrados.isEmpty
-                      ? const Center(child: Text('Nenhum chamado encontrado.'))
-                      : ListView.builder(
-                          itemCount: chamadosFiltrados.length,
-                          itemBuilder: (context, index) {
-                            final c = chamadosFiltrados[index];
-                            return ListTile(
-                              leading: const Icon(Icons.report_problem,
-                                  color: Colors.blueGrey),
-                              title: Text(c.titulo,
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.bold)),
-                              subtitle: Text(
-                                  '${c.categoria} • ${c.rua}, ${c.bairro}'),
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  if (c.imagemBase64 != null)
-                                    const Icon(Icons.photo_camera,
-                                        color: Colors.grey, size: 16),
-                                  const SizedBox(width: 8),
-                                  Chip(label: Text(c.status)),
-                                ],
-                              ),
-                              onTap: () => _abrirModalDetalhes(context, c),
-                            );
-                          },
-                        ),
-                ),
-              ],
-            ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => Navigator.push(context,
-            MaterialPageRoute(builder: (context) => const CadastroScreen())),
-        icon: const Icon(Icons.add),
+            MaterialPageRoute(builder: (_) => const CadastroScreen())),
+        icon: const Icon(Icons.add_location_alt_outlined),
         label: const Text('Novo Chamado'),
       ),
+      body: provider.isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : ListView(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
+              children: [
+                DashboardHeader(
+                  totalChamados: provider.chamados.length,
+                  subtitle:
+                      'Acompanhe os problemas reportados na cidade',
+                ),
+                const SizedBox(height: 20),
+                TextField(
+                  decoration: const InputDecoration(
+                    hintText: 'Buscar por título ou bairro...',
+                    prefixIcon: Icon(Icons.search),
+                  ),
+                  onChanged: (v) => setState(() => _searchQuery = v),
+                ),
+                const SizedBox(height: 16),
+                if (chamadosFiltrados.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 40),
+                    child: EmptyState(
+                      icon: Icons.inbox_outlined,
+                      title: 'Nenhum chamado encontrado',
+                      subtitle:
+                          'Seja o primeiro a registrar um problema na sua cidade.',
+                    ),
+                  )
+                else
+                  ...chamadosFiltrados.map((c) => Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: ChamadoTile(
+                          chamado: c,
+                          onTap: () => _abrirModalDetalhes(context, c),
+                        ),
+                      )),
+              ],
+            ),
     );
   }
 }

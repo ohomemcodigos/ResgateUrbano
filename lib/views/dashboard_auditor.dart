@@ -26,8 +26,7 @@ class DashboardAuditorScreen extends StatefulWidget {
   final void Function(bool useLightMode) handleBrightnessChange;
 
   @override
-  State<DashboardAuditorScreen> createState() =>
-      _DashboardAuditorScreenState();
+  State<DashboardAuditorScreen> createState() => _DashboardAuditorScreenState();
 }
 
 class _DashboardAuditorScreenState extends State<DashboardAuditorScreen> {
@@ -171,15 +170,14 @@ class _OperacionalTabState extends State<_OperacionalTab> {
                       color: AppColors.statusConcluido, size: 18),
                   const SizedBox(width: 8),
                   Expanded(
-                      child: Text(
-                          'Chamado concluído não pode ser editado.',
+                      child: Text('Chamado concluído não pode ser editado.',
                           style: theme.textTheme.bodySmall)),
                 ]),
               )
             else ...[
               Text('Alterar status',
-                  style: theme.textTheme.labelLarge?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant)),
+                  style: theme.textTheme.labelLarge
+                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
               const SizedBox(height: 10),
               Row(children: [
                 Expanded(
@@ -239,8 +237,7 @@ class _OperacionalTabState extends State<_OperacionalTab> {
       ..sort((a, b) => peso(b.prioridade).compareTo(peso(a.prioridade)));
 
     final abertos = provider.chamadosAbertos.length;
-    final andamento =
-        chamados.where((c) => c.status == 'Em andamento').length;
+    final andamento = chamados.where((c) => c.status == 'Em andamento').length;
     final concluidos = chamados.where((c) => c.status == 'Concluído').length;
     final criticos = provider.chamadosCriticos.length;
 
@@ -274,7 +271,7 @@ class _OperacionalTabState extends State<_OperacionalTab> {
           physics: const NeverScrollableScrollPhysics(),
           mainAxisSpacing: 12,
           crossAxisSpacing: 12,
-          childAspectRatio: 1.5,
+          childAspectRatio: 1.1,
           children: [
             StatCard(
                 label: 'Abertos',
@@ -301,8 +298,7 @@ class _OperacionalTabState extends State<_OperacionalTab> {
         const SizedBox(height: 20),
         TextField(
           decoration: const InputDecoration(
-              hintText: 'Buscar chamados...',
-              prefixIcon: Icon(Icons.search)),
+              hintText: 'Buscar chamados...', prefixIcon: Icon(Icons.search)),
           onChanged: (v) => setState(() => _searchQuery = v),
         ),
         const SizedBox(height: 16),
@@ -321,8 +317,7 @@ class _OperacionalTabState extends State<_OperacionalTab> {
                   chamado: c,
                   onTap: () => _abrirModalStatus(context, c),
                   trailing: IconButton(
-                    icon: Icon(
-                        c.isFavorito ? Icons.star : Icons.star_border,
+                    icon: Icon(c.isFavorito ? Icons.star : Icons.star_border,
                         color: c.isFavorito
                             ? Colors.amber
                             : Theme.of(context).colorScheme.onSurfaceVariant),
@@ -370,8 +365,7 @@ class _EstatisticasTab extends StatelessWidget {
     final provider = Provider.of<ChamadosProvider>(context);
     final chamados = provider.chamados;
     final abertos = provider.chamadosAbertos.length;
-    final andamento =
-        chamados.where((c) => c.status == 'Em andamento').length;
+    final andamento = chamados.where((c) => c.status == 'Em andamento').length;
     final concluidos = chamados.where((c) => c.status == 'Concluído').length;
     final ranking = provider.rankingDeBairros;
     final mediaSLA = provider.tempoMedioResolucaoPorCategoria;
@@ -385,8 +379,7 @@ class _EstatisticasTab extends StatelessWidget {
             context,
             chamados.isEmpty
                 ? const EmptyState(
-                    icon: Icons.pie_chart_outline,
-                    title: 'Dados insuficientes')
+                    icon: Icons.pie_chart_outline, title: 'Dados insuficientes')
                 : Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
@@ -461,8 +454,7 @@ class _EstatisticasTab extends StatelessWidget {
                               child: Text(
                                   cat.isEmpty
                                       ? cat
-                                      : cat[0].toUpperCase() +
-                                          cat.substring(1),
+                                      : cat[0].toUpperCase() + cat.substring(1),
                                   style: const TextStyle(
                                       fontWeight: FontWeight.w600))),
                           Text(val,
@@ -504,8 +496,7 @@ class _EstatisticasTab extends StatelessWidget {
                                       fontWeight: FontWeight.w600))),
                           Text('$qtd ocorrências',
                               style: theme.textTheme.bodySmall?.copyWith(
-                                  color:
-                                      theme.colorScheme.onSurfaceVariant)),
+                                  color: theme.colorScheme.onSurfaceVariant)),
                         ]),
                       );
                     }),

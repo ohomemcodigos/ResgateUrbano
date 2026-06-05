@@ -1,10 +1,13 @@
 # SOS Cidade (Missão Resgate Urbano)
 
+![Versão](https://img.shields.io/badge/versão-v1.0.1-blue.svg)
+![Flutter](https://img.shields.io/badge/Flutter-3.x-02569B?logo=flutter)
+
 > Uma plataforma de zeladoria urbana inteligente que conecta os cidadãos à gestão pública, garantindo transparência, eficiência e inteligência de dados na resolução de problemas da cidade.
 
 ## Download
 
-O APK, para sistemas Android, mais recente do aplicativo pode ser baixado através da página de [Releases do GitHub](https://github.com/ohomemcodigos/ResgateUrbano/releases).
+O APK (Android) mais recente do aplicativo, otimizado para dispositivos físicos, pode ser descarregado através da página de [Releases do GitHub](https://github.com/ohomemcodigos/ResgateUrbano/releases).
 
 ## Sobre o Projeto
 
@@ -38,7 +41,8 @@ O aplicativo foi desenvolvido utilizando **Flutter (Dart)** com a arquitetura Ma
 * `provider` (^6.1.1): Gerenciamento de estado reativo e isolamento das regras de negócio.
 
 ### Persistência de Dados e Resiliência
-* `sqflite` (^2.3.0) & `sqflite_common_ffi`: Banco de dados local.
+* `sqflite` (^2.3.0) & `sqflite_common_ffi`: Banco de dados local padrão.
+* **Inicialização Inteligente:** O sistema detecta a plataforma de execução via `dart:io`. Em dispositivos móveis físicos (Android/iOS), utiliza o motor SQLite nativo. 
 * *Fallback em Memória:* Lógica customizada para suportar a emulação em navegadores (Web) sem gerar *crashes* por falta de permissões de disco.
 
 ### Integrações e Manipulação de Dados
@@ -79,6 +83,7 @@ Estas instruções explicam como configurar o ambiente de desenvolvimento para e
    ```bash
    flutter run
    ```
+> **Nota:** Para compilar o APK de produção localmente, utilize o comando `flutter build apk --release`.
 
 ## Projeto Acadêmico
 Este aplicativo foi construído para a disciplina de Mobile do curso de Ciência da Computação da [UNIPÊ](https://www.unipe.edu.br/).
